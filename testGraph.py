@@ -142,7 +142,7 @@ def rb_d2_transmission(T_C=Temp, detuning_GHz=10, show_components=True):
                     components.append((det_MHz, profile, label))
 
     # Convert absorption profiles into transmission dips
-    scale = 0.5 # optical depth scaling (adjust for deeper or shallower dips)
+    scale = 0.69 # optical depth scaling (adjust for deeper or shallower dips)
     T_total = np.exp(-scale * alpha_total / np.max(alpha_total))
 
     component_transmissions = []
@@ -166,8 +166,13 @@ x, T_total, comps = rb_d2_transmission(T_C=Temp)
 plt.plot(x, T_total, color = "grey", lw=1)
 #plt.plot(xData, yData, color = "grey", lw=1)
 
-for det, T_comp, label in comps:
-    plt.plot(det/1e3, T_comp, '--', alpha=0.6, label=label)
+# --- Colour map for groups of 3 Voigts ---
+colours = ['deepskyblue', 'firebrick', 'purple', 'darkkhaki']
+
+# Plot each component with grouped colours
+for i, (det, T_comp, label) in enumerate(comps):
+    colour = colours[i // 3 % len(colours)]  # groups of 3
+    plt.plot(det/1e3, T_comp, '--', alpha=0.8, lw=1.5, color=colour, label=label)
 
 
 plt.fill_between(x, T_total, 1, color='lightgrey', alpha=0.5)
@@ -212,7 +217,7 @@ img = mpimg.imread(r"C:\Users\Matt\Desktop\Lvl_4\Project\SilverD2Diagram.png")
 # Place image in axis coordinates (0-1)
 plt.imshow(img, extent=[-5, 5+adjust, 0.05, 0.5], aspect='auto', alpha=0.7)
 
-#plt.savefig(r"C:\Users\Matt\Desktop\Lvl_4\Project\voigt_combined.pdf", bbox_inches='tight')
+plt.savefig(r"C:\Users\Matt\Desktop\Lvl_4\Project\voigt_combined.pdf", bbox_inches='tight')
 
 
 
