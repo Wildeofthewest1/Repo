@@ -217,7 +217,7 @@ img = mpimg.imread(r"C:\Users\Matt\Desktop\Lvl_4\Project\SilverD2Diagram.png")
 # Place image in axis coordinates (0-1)
 plt.imshow(img, extent=[-5, 5+adjust, 0.05, 0.5], aspect='auto', alpha=0.7)
 
-plt.savefig(r"C:\Users\Matt\Desktop\Lvl_4\Project\voigt_combined.pdf", bbox_inches='tight')
+#plt.savefig(r"C:\Users\Matt\Desktop\Lvl_4\Project\voigt_combined.pdf", bbox_inches='tight')
 
 
 
