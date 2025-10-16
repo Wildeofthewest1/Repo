@@ -34,25 +34,25 @@ abundance85 = 0.7217
 
 ################################################################
 
-# ============================================================
+
 # Rubidium D2 Transmission Spectrum (showing individual Voigt dips)
-# ============================================================
+
 
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import wofz
 from sympy.physics.wigner import wigner_6j
 
-# --------------------------
+
 # Physical constants
-# --------------------------
+
 c = 2.99792458e8
 kB = 1.380649e-23
 amu = 1.66053906660e-27
 
-# --------------------------
+
 # Rb D2 line parameters
-# --------------------------
+
 lambda0 = 780.241e-9
 nu0 = c / lambda0
 Gamma_nat = 2 * np.pi * 6.066e6   # natural linewidth [rad/s]
@@ -77,9 +77,9 @@ isotopes = {
     }
 }
 
-# --------------------------
+
 # Utility functions
-# --------------------------
+
 def hyperfine_energies(I, J, A, B):
     F_values = np.arange(abs(I - J), I + J + 1)
     E = []
@@ -104,9 +104,9 @@ def gamma_nat():
 def sigma_doppler(T):
     return nu0 * np.sqrt(2*kB*T*np.log(2)/mass_Rb/c**2) / 1e6  # MHz
 
-# --------------------------
+
 # Spectrum calculation
-# --------------------------
+
 def rb_d2_transmission(T_C=Temp, detuning_GHz=10, show_components=True):
     T = T_C + 273.15
     det_MHz = np.linspace(-detuning_GHz, detuning_GHz, 2000) * 1e3
@@ -152,9 +152,6 @@ def rb_d2_transmission(T_C=Temp, detuning_GHz=10, show_components=True):
 
     return det_MHz / 1e3, T_total, component_transmissions  # detuning in GHz
 
-# --------------------------
-# Plot: transmission dips
-# --------------------------
 
 #################################################################
 
