@@ -53,9 +53,11 @@ Gamma_nat = natural_linewidth   # natural linewidth [rad/s]
 
 mass_Ag = 106.9050916 * amu
 
+abundance107 = 0.51839
+
 isotopes = {
     "Ag107": {
-        "frac": 0.51839,
+        "frac": abundance107,
         "I": 1/2,
         "A_g": 1977e6*0.8637,
         "A_e": (75e6/2)*0.8637,
@@ -64,7 +66,7 @@ isotopes = {
         "mass": 106.9050916 * amu
     },
     "Ag109": {
-        "frac": 0.48161,
+        "frac": 1-abundance107,
         "I": 1/2,
         "A_g": 1977e6, #Uhlenberg et al
         "A_e": 75e6/2, #Uhlenberg et al
