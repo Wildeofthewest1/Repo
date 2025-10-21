@@ -1,19 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from numpy import zeros,sqrt,pi,dot,exp,sin,cos,array,amax,arange,concatenate,argmin,log10,append, transpose, identity, matmul
+from numpy import zeros,sqrt,pi,dot,exp,sin,cos,array,amax,arange,concatenate,argmin,log10,append, transpose, identity, matmul, kron
 
 from scipy.special import wofz
 from scipy.interpolate import interp1d
 
 from scipy.constants import physical_constants, epsilon_0, hbar, c, e, h, k
 
-from sympy import Symbol, cos, sin, pi, simplify, eye, powsimp, powdenest, lambdify, solve, solveset
+from sympy import Symbol, cos, sin, simplify, eye, powsimp, powdenest, lambdify, solve, solveset
 
 from sympy.matrices import det, Matrix
 
 import scipy.linalg as la
-from scipy.linalg import qr, eig, eigh, kron
+from scipy.linalg import qr, eig, eigh
 import scipy
 
 S=0.5 #Electron spin
@@ -440,68 +440,6 @@ def null(A, atol=1e-15, rtol=0):
     ns = vh[nnz:].conj().T
     return ns
 '''
-	
-def main():
-	""" General test method """
-	from . import spectra as sp
-	p_dict = {'Bfield':700,'rb85frac':1,'Btheta':88*np.pi/180,'Bphi':0*np.pi/180,'lcell':75e-3,'T':84,'Dline':'D2','Elem':'Cs'}
-	chiL,chiR,chiZ = sp.calc_chi(np.linspace(-3500,3500,10),p_dict)
-	
-	#print 'ez: ',chiZ + 1 # ez / e0
-	#print 'ex: ',0.5*(2+chiL+chiR) # ex / e0
-	#print 'exy: ',0.5j*(chiR-chiL) # exy / e0
-	
-	RotMat, n1, n2 = solve_diel(chiL,chiR,chiZ,88*np.pi/180)
-	print((RotMat.shape))
-
-def calculation_time_analysis():
-	""" Test method for looking at timing performance """
-	from . import spectra as sp
-	p_dict = {'Bfield':700,'rb85frac':1,'Btheta':88*np.pi/180,'Bphi':0*np.pi/180,'lcell':75e-3,'T':84,'Dline':'D2','Elem':'Cs'}
-	chiL,chiR,chiZ = sp.calc_chi([-3500],p_dict)
-	
-	for angle in [0, np.pi/32, np.pi/16, np.pi/8, np.pi/4, np.pi/2]:
-		print(('Angle (degrees): ',angle*180/np.pi))
-		RotMat, n1, n2 = solve_diel(chiL,chiR,chiZ,angle)
-		
-def test_equivalence():
-	""" Test numeric vs analytic solutions """
-	
-	from . import spectra as sp
-	
-	#analytic
-	p_dict = {'Bfield':15000,'rb85frac':1,'Btheta':0*np.pi/180,'Bphi':0*np.pi/180,'lcell':1e-3,'T':84,'Dline':'D2','Elem':'Rb'}
-	chiL1,chiR1,chiZ1 = sp.calc_chi([-18400],p_dict)
-	RotMat1, n11, n21 = solve_diel(chiL1,chiR1,chiZ1,0,150,force_numeric=False)
-	
-	#numeric
-	chiL2, chiR2, chiZ2 = chiL1, chiR1, chiZ1
-	#chiL2,chiR2,chiZ2 = sp.calc_chi([-18400],p_dict)
-	RotMat2, n12, n22 = solve_diel(chiL2,chiR2,chiZ2,0,150,force_numeric=True)
-	
-	print('RM 1')
-	print(RotMat1)
-
-	print('RM 2')
-	print(RotMat2)	
-	
-	print('n1_1 (analytic)')
-	print(n11)
-	print('n1_2')
-	print(n12)
-	print('n2_1 (analytic)')
-	print(n21)
-	print('n2_2')
-	print(n22)
-	
-	print('chi1')
-	print((chiL1, chiR1, chiZ1))
-
-	print('chi2')
-	print((chiL2, chiR2, chiZ2))
-	
-if __name__ == '__main__':
-	test_equivalence()
 
 # Horizontal polarisers (P_x)
 HorizPol_xy = np.matrix([[1,0],[0,0]])
@@ -963,35 +901,37 @@ class Hamiltonian(object):
 
 def jp(jj):
     b = 0
-    dim = int(2*jj+1)
-    jp = zeros((dim,dim))
-    z = arange(dim)
-    m = jj-z
-    while b<dim-1:
-        mm = m[b+1]
-        jp[b,b+1] = sqrt(jj*(jj+1)-mm*(mm+1)) 
-        b = b+1
-    return jp
-
+    dim = int(2*jj + 1)
+    Jp = np.zeros((dim, dim))
+    z = np.arange(dim)
+    m = jj - z
+    while b < dim - 1:
+        mm = m[b + 1]
+        Jp[b, b + 1] = np.sqrt(jj * (jj + 1) - mm * (mm + 1))
+        b += 1
+    return Jp
 
 
 def jx(jj):
-    jp=jp(jj)
-    jm=transpose(jp)
-    jx=0.5*(jp+jm)
-    return jx
+    Jp = jp(jj)
+    Jm = Jp.T
+    Jx = 0.5 * (Jp + Jm)
+    return Jx
+
 
 def jy(jj):
-    jp=jp(jj)
-    jm=transpose(jp)
-    jy=0.5j*(jm-jp)
-    return jy
+    Jp = jp(jj)
+    Jm = Jp.T
+    Jy = 0.5j * (Jm - Jp)
+    return Jy
+
 
 def jz(jj):
-    jp=jp(jj)
-    jm=transpose(jp)
-    jz=0.5*(dot(jp,jm)-dot(jm,jp))
-    return jz
+    Jp = jp(jj)
+    Jm = Jp.T
+    Jz = 0.5 * (np.dot(Jp, Jm) - np.dot(Jm, Jp))
+    return Jz
+
 
 class IdealAtom:
 	""" Constants for an ideal atom with no hyperfine structure, and only electron spin """
@@ -2282,6 +2222,67 @@ def output_list():
 	"	
 	print(tstr)
 
+
+def main():
+	""" General test method """
+	
+	p_dict = {'Bfield':700,'rb85frac':1,'Btheta':88*np.pi/180,'Bphi':0*np.pi/180,'lcell':75e-3,'T':84,'Dline':'D2','Elem':'Cs'}
+	chiL,chiR,chiZ = calc_chi(np.linspace(-3500,3500,10),p_dict)
+	
+	#print 'ez: ',chiZ + 1 # ez / e0
+	#print 'ex: ',0.5*(2+chiL+chiR) # ex / e0
+	#print 'exy: ',0.5j*(chiR-chiL) # exy / e0
+	
+	RotMat, n1, n2 = solve_diel(chiL,chiR,chiZ,88*np.pi/180)
+	print((RotMat.shape))
+
+def calculation_time_analysis():
+	""" Test method for looking at timing performance """
+
+	p_dict = {'Bfield':700,'rb85frac':1,'Btheta':88*np.pi/180,'Bphi':0*np.pi/180,'lcell':75e-3,'T':84,'Dline':'D2','Elem':'Cs'}
+	chiL,chiR,chiZ = calc_chi([-3500],p_dict)
+	
+	for angle in [0, np.pi/32, np.pi/16, np.pi/8, np.pi/4, np.pi/2]:
+		print(('Angle (degrees): ',angle*180/np.pi))
+		RotMat, n1, n2 = solve_diel(chiL,chiR,chiZ,angle)
+		
+def test_equivalence():
+	""" Test numeric vs analytic solutions """
+	
+	
+	#analytic
+	p_dict = {'Bfield':15000,'rb85frac':1,'Btheta':0*np.pi/180,'Bphi':0*np.pi/180,'lcell':1e-3,'T':84,'Dline':'D2','Elem':'Rb'}
+	chiL1,chiR1,chiZ1 = calc_chi([-18400],p_dict)
+	RotMat1, n11, n21 = solve_diel(chiL1,chiR1,chiZ1,0,150,force_numeric=False)
+	
+	#numeric
+	chiL2, chiR2, chiZ2 = chiL1, chiR1, chiZ1
+	#chiL2,chiR2,chiZ2 = sp.calc_chi([-18400],p_dict)
+	RotMat2, n12, n22 = solve_diel(chiL2,chiR2,chiZ2,0,150,force_numeric=True)
+	
+	print('RM 1')
+	print(RotMat1)
+
+	print('RM 2')
+	print(RotMat2)	
+	
+	print('n1_1 (analytic)')
+	print(n11)
+	print('n1_2')
+	print(n12)
+	print('n2_1 (analytic)')
+	print(n21)
+	print('n2_2')
+	print(n22)
+	
+	print('chi1')
+	print((chiL1, chiR1, chiZ1))
+
+	print('chi2')
+	print((chiL2, chiR2, chiZ2))
+	
+if __name__ == '__main__':
+	test_equivalence()
 
 
 Detuning=np.linspace(-10,10,1000)*1e3 #Detuning range between -10 and 10 GHz. Needs to be input in MHz
