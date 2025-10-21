@@ -46,30 +46,31 @@ lambda0 = 328.0680e-9 #Kramida, A., Ralchenko, Yu., Reader, J., and NIST ASD Tea
 #^ Central transition frequency in m
 nu0 = c / lambda0
 
-abundance = 0.5184 #abundance of more abundant isotope from silver nmr site
+natural_linewidth = 1.4e8 #[rad/s] as given on NIST
 
-natural_linewidth = 1.4e8 #Hz
-
-Gamma_nat = 2 * np.pi * natural_linewidth   # natural linewidth [rad/s]
+Gamma_nat = natural_linewidth   # natural linewidth [rad/s]
 #^ converting natural linewidth from Hz to rad/s
-mass_Rb = 107 * amu
+
+mass_Ag = 106.9050916 * amu
 
 isotopes = {
     "Ag107": {
-        "frac": abundance,
+        "frac": 0.51839,
         "I": 1/2,
         "A_g": 1977e6*0.8637,
         "A_e": (75e6/2)*0.8637,
         "B_e": 0,
-        "shift": -476.6e6 #Uhlenberg et al 476.6
+        "shift": 476.6e6, #Uhlenberg et al 476.6
+        "mass": 106.9050916 * amu
     },
     "Ag109": {
-        "frac": 1-abundance,
+        "frac": 0.48161,
         "I": 1/2,
         "A_g": 1977e6, #Uhlenberg et al
         "A_e": 75e6/2, #Uhlenberg et al
         "B_e": 0,
-        "shift": 0.0
+        "shift": 0.0,
+        "mass": 108.9047553 * amu
     }
 }
 
@@ -104,7 +105,7 @@ def gamma_nat():
 
 def sigma_doppler(T):
     """Doppler width (1-sigma) in MHz."""
-    return nu0 * np.sqrt(2*kB*T*np.log(2)/mass_Rb/c**2) / 1e6
+    return nu0 * np.sqrt(2*kB*T*np.log(2)/mass_Ag/c**2) / 1e6
 
 # Spectrum calculation
 
