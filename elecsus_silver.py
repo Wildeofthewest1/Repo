@@ -25,7 +25,6 @@ e0=epsilon_0 #Permittivity of free space
 a0=physical_constants['Bohr radius'][0]
 kB = physical_constants['Boltzmann constant'][0]
 
-
 def CalcNumberDensity(T,atom):
 	""" Helper function to tidy up code in spectra_SPD.py 
 		Calls one of the other functions in this module, based on atom parameter
@@ -42,6 +41,8 @@ def CalcNumberDensity(T,atom):
 		return numDenK(T)
 	elif atom=='Na':
 		return numDenNa(T)
+	elif atom in ['Ag107','Ag109','Ag']:
+		return numDenAg(T)
 
 def numDenRb(T):
     """Calculates the rubidium number density"""
@@ -79,6 +80,9 @@ def numDenNa(T):
     NumberDensity=101325.0*p/(kB*T)
     return NumberDensity
 
+def numDenAg(T):
+    NumberDensity=1e16
+    return NumberDensity
 
 def solve_diel(chiL, chiR, chiZ, THETA, Bfield, verbose=False,force_numeric=False):
 	''' 
@@ -613,7 +617,6 @@ def test_reverse_rotn():
 	print('Rotated back:')
 	print(E_original)
 
-
 def sz(L,S,I):
     Sz=jz(S)
     gL=int(2*L+1)
@@ -806,14 +809,12 @@ class Hamiltonian(object):
             transition = RbD2Transition
             atom_transition = Rb87_D2
 
-
         elif (Trans=='D2') and (Isotope=='Ag107'):
             transition = AgD2Transition
             atom_transition = Ag107_D2
         elif (Trans=='D2') and (Isotope=='Ag109'):
             transition = AgD2Transition
             atom_transition = Ag109_D2
-
 
         elif (Trans=='D1') and (Isotope=='Cs'):
             transition = CsD1Transition
@@ -897,8 +898,6 @@ class Hamiltonian(object):
         sortedManifold=sorted(transpose(stateManifold),key=(lambda i:i[0]))
         return sortedManifold, EigenValues
 
-
-
 def jp(jj):
     b = 0
     dim = int(2*jj + 1)
@@ -911,13 +910,11 @@ def jp(jj):
         b += 1
     return Jp
 
-
 def jx(jj):
     Jp = jp(jj)
     Jm = Jp.T
     Jx = 0.5 * (Jp + Jm)
     return Jx
-
 
 def jy(jj):
     Jp = jp(jj)
@@ -925,13 +922,11 @@ def jy(jj):
     Jy = 0.5j * (Jm - Jp)
     return Jy
 
-
 def jz(jj):
     Jp = jp(jj)
     Jm = Jp.T
     Jz = 0.5 * (np.dot(Jp, Jm) - np.dot(Jm, Jp))
     return Jz
-
 
 class IdealAtom:
 	""" Constants for an ideal atom with no hyperfine structure, and only electron spin """
@@ -956,8 +951,6 @@ class Rb87:
     mass = 86.909180520*amu
     FS = 7.123e6 # Fine-structure splitting (MHz)
 
-
-
 class Ag107:
     """Constants for silver-107 atom"""
     I = 0.5
@@ -973,8 +966,6 @@ class Ag109:
     gI = 1.426e-4
     mass = 108.904755 * amu
     FS = 0.0
-
-
 
 class Cs:
     """Constants relating to the caesium-133 atom"""
@@ -1016,7 +1007,6 @@ class Na:
     mass = 22.9897692807*amu
     FS = 508.8487162e6 - 508.3331958e6 # Fine-structure splitting (MHz)
 	
-
 # Element-Transition constants
 
 class RbD1Transition:
@@ -1035,7 +1025,6 @@ class RbD2Transition:
     dipoleStrength=3.0*sqrt(e0*hbar*(2.0*NatGamma*(10.0**6))*(wavelength**3)/(8.0*pi))
     v0=384230426.6e6
 
-
 class AgD2Transition:
     """Constants relating to the silver D2 transition"""
     wavelength=328.0680e-9
@@ -1043,7 +1032,6 @@ class AgD2Transition:
     NatGamma=22.28
     dipoleStrength=3.0*sqrt(e0*hbar*(2.0*NatGamma*(10.0**6))*(wavelength**3)/(8.0*pi))
     v0= 9.1342e14
-
 
 class CsD1Transition:
     """Constants relating to the caesium D1 transition"""
@@ -1093,7 +1081,6 @@ class NaD2Transition:
     dipoleStrength=3.0*sqrt(e0*hbar*(2.0*NatGamma*(10.0**6))*(wavelength**3)/(8.0*pi))
     v0=508.8487162e12 #Sodium D1 linecentre in Hz
 
-
 class IdealD1Transition:
     """Constants relating to the rubidium D1 transition"""
     wavelength = 780e-9 #The weighted linecentre of the rubidium D1 line in m
@@ -1101,7 +1088,6 @@ class IdealD1Transition:
     NatGamma = 6 #Rubidium D1 natural linewidth in MHz
     dipoleStrength = 3.0*sqrt(e0*hbar*(2.0*NatGamma*(10.0**6))*(wavelength**3)/(8.0*pi))
     v0 = 377107407.299e6 #The weighted linecentre of the rubidium D1 line in Hz
-
 
 # transitions dictionary
 transitions = {'RbD1':RbD1Transition, 'RbD2':RbD2Transition,
@@ -1147,8 +1133,6 @@ class Rb87_D2:
     Bp = 12.4965
     IsotopeShift = -56.361 #MHz
 
-
-
 class Ag107_D2:
     """Constants relating to rubidium-85 and the D2 transition"""
     #Hyperfine constants in units of MHz
@@ -1162,8 +1146,6 @@ class Ag109_D2:
     Ap = 75e6/2
     Bp = 0
     IsotopeShift = 0 #MHz
-
-
 
 class Cs_D1:
     """Constants relating to the caesium-133 atom and the D1 transition"""
@@ -1235,7 +1217,6 @@ class Na_D2:
     Bp = 2.724
     IsotopeShift = 0.0 #Only one isotope.
 
-
 def xyz_to_lrz(E_in):
 	""" Convert from linear to circular bases """
 	# create output array
@@ -1270,13 +1251,6 @@ def lrz_to_xyz(E_in):
 	
 	return E_out
 
-
-
-
-
-
-
-
 # Default values for parameters
 p_dict_defaults = {	'Elem':'Rb', 'Dline':'D2', 
 							'lcell':75e-3,'Bfield':0., 'T':20., 
@@ -1286,7 +1260,7 @@ p_dict_defaults = {	'Elem':'Rb', 'Dline':'D2',
 							# B-field angle w.r.t. light k-vector
 							'Btheta':0, 'Bphi':0,
 							'Constrain':True, 'DoppTemp':20.,
-							'rb85frac':72.17, 'K40frac':0.01, 'K41frac':6.73,
+							'rb85frac':72.17, 'K40frac':0.01, 'K41frac':6.73,'Ag107frac':51.839, 'Ag109frac':48.161,
 							'BoltzmannFactor':True}
 
 def FreqStren(groundLevels,excitedLevels,groundDim,
@@ -1477,6 +1451,25 @@ def calc_chi(X, p_dict,verbose=False):
 		K41frac = p_dict['K41frac']
 	else:
 		K41frac = p_dict_defaults['K41frac']
+
+
+
+
+
+	if 'Ag107frac' in list(p_dict.keys()):
+		Ag107frac = p_dict['Ag107frac']
+	else:
+		Ag107frac = p_dict_defaults['Ag107frac']
+
+	if 'Ag109frac' in list(p_dict.keys()):
+		Ag109frac = p_dict['Ag109frac']
+	else:
+		Ag109frac = p_dict_defaults['Ag109frac']
+
+
+
+
+
 	if 'BoltzmannFactor' in list(p_dict.keys()):
 		BoltzmannFactor =  p_dict['BoltzmannFactor']
 	else:
@@ -1491,6 +1484,10 @@ def calc_chi(X, p_dict,verbose=False):
 	rb85frac = rb85frac/100.0
 	K40frac  = K40frac/100.0
 	K41frac  = K41frac/100.0
+
+	Ag107frac = Ag107frac/100.0
+	Ag109frac = Ag109frac/100.0
+
 
 	if Bfield==0.0:
 		Bfield = 0.0001 #To avoid degeneracy problem at B = 0.
@@ -1685,6 +1682,74 @@ def calc_chi(X, p_dict,verbose=False):
 		elif K41frac!=0.0 and (K39frac==0.0 and K40frac==0.0):
 			AllEnergyLevels = concatenate((lenergy41,renergy41,zenergy41))
 
+	# Silver energy levels
+	elif Elem == 'Ag':
+		# Define isotope(s)
+		Ag107frac = 1.0 - Ag109frac  # Example: natural silver isotopes
+
+		if Ag107frac != 0.0:
+			Ag107atom = Ag107
+			Ag107_ES = Hamiltonian('Ag107', Dline, 1.0, Bfield)
+
+			lenergy107, lstrength107, ltransno107 = FreqStren(
+				Ag107_ES.groundManifold,
+				Ag107_ES.excitedManifold,
+				Ag107_ES.ds, Ag107_ES.dp, Dline,
+				'Left', BoltzmannFactor, T + 273.16
+			)
+			renergy107, rstrength107, rtransno107 = FreqStren(
+				Ag107_ES.groundManifold,
+				Ag107_ES.excitedManifold,
+				Ag107_ES.ds, Ag107_ES.dp, Dline,
+				'Right', BoltzmannFactor, T + 273.16
+			)
+			zenergy107, zstrength107, ztransno107 = FreqStren(
+				Ag107_ES.groundManifold,
+				Ag107_ES.excitedManifold,
+				Ag107_ES.ds, Ag107_ES.dp, Dline,
+				'Z', BoltzmannFactor, T + 273.16
+			)
+
+		if Ag109frac != 0.0:
+			Ag109atom = Ag109
+			Ag109_ES = Hamiltonian('Ag109', Dline, 1.0, Bfield)
+
+			lenergy109, lstrength109, ltransno109 = FreqStren(
+				Ag109_ES.groundManifold,
+				Ag109_ES.excitedManifold,
+				Ag109_ES.ds, Ag109_ES.dp, Dline,
+				'Left', BoltzmannFactor, T + 273.16
+			)
+			renergy109, rstrength109, rtransno109 = FreqStren(
+				Ag109_ES.groundManifold,
+				Ag109_ES.excitedManifold,
+				Ag109_ES.ds, Ag109_ES.dp, Dline,
+				'Right', BoltzmannFactor, T + 273.16
+			)
+			zenergy109, zstrength109, ztransno109 = FreqStren(
+				Ag109_ES.groundManifold,
+				Ag109_ES.excitedManifold,
+				Ag109_ES.ds, Ag109_ES.dp, Dline,
+				'Z', BoltzmannFactor, T + 273.16
+			)
+
+		# Choose transition constants for the selected D-line
+		if Dline == 'D1':
+			transitionConst = AgD2Transition
+		elif Dline == 'D2':
+			transitionConst = AgD2Transition
+
+		# Combine isotope contributions
+		if Ag107frac != 0.0 and Ag109frac != 0.0:
+			AllEnergyLevels = concatenate((
+				lenergy107, renergy107, zenergy107,
+				lenergy109, renergy109, zenergy109
+			))
+		elif Ag107frac != 0.0:
+			AllEnergyLevels = concatenate((lenergy107, renergy107, zenergy107))
+		elif Ag109frac != 0.0:
+			AllEnergyLevels = concatenate((lenergy109, renergy109, zenergy109))
+
 #Calculate Voigt
 
 	DoppTemp = T #Set doppler temperature to the number density temperature
@@ -1706,6 +1771,8 @@ def calc_chi(X, p_dict,verbose=False):
 		NDensity=numDenK(T)
 	elif Elem=='Na':
 		NDensity=numDenNa(T)
+	elif Elem== 'Ag':
+		NDensity=numDenAg(T)
 
 	#Calculate lorentzian broadening and shifts
 	gamma0 = 2.0*pi*transitionConst.NatGamma*1.e6
@@ -1813,6 +1880,40 @@ def calc_chi(X, p_dict,verbose=False):
 		ChiImLeft = prefactor*(K39frac*lab39+K40frac*lab40+K41frac*lab41)
 		ChiImRight = prefactor*(K39frac*rab39+K40frac*rab40+K41frac*rab41)
 		ChiImZ = prefactor*(K39frac*zab39+K40frac*zab40+K41frac*zab41)
+	elif Elem == 'Ag':
+
+		# Initialise all Lorentzian/dispersion components
+		lab107, ldisp107, rab107, rdisp107, zab107, zdisp107 = 0,0,0,0,0,0
+		lab109, ldisp109, rab109, rdisp109, zab109, zdisp109 = 0,0,0,0,0,0
+
+		# Add isotope-resolved Voigt profiles
+		if Ag107frac != 0.0:
+			lab107, ldisp107, rab107, rdisp107, zab107, zdisp107 = add_voigt(
+				d, DoppTemp, Ag107atom.mass, wavenumber,
+				gamma, voigtwidth,
+				ltransno107, lenergy107, lstrength107,
+				rtransno107, renergy107, rstrength107,
+				ztransno107, zenergy107, zstrength107
+			)
+
+		if Ag109frac != 0.0:
+			lab109, ldisp109, rab109, rdisp109, zab109, zdisp109 = add_voigt(
+				d, DoppTemp, Ag109atom.mass, wavenumber,
+				gamma, voigtwidth,
+				ltransno109, lenergy109, lstrength109,
+				rtransno109, renergy109, rstrength109,
+				ztransno109, zenergy109, zstrength109
+			)
+
+		# Build real and imaginary parts of susceptibility
+		ChiRealLeft  = prefactor * (Ag107frac * ldisp107 + Ag109frac * ldisp109)
+		ChiRealRight = prefactor * (Ag107frac * rdisp107 + Ag109frac * rdisp109)
+		ChiRealZ     = prefactor * (Ag107frac * zdisp107 + Ag109frac * zdisp109)
+
+		ChiImLeft  = prefactor * (Ag107frac * lab107 + Ag109frac * lab109)
+		ChiImRight = prefactor * (Ag107frac * rab107 + Ag109frac * rab109)
+		ChiImZ     = prefactor * (Ag107frac * zab107 + Ag109frac * zab109)
+
 
 	# Reconstruct total susceptibility and index of refraction
 	totalChiPlus = ChiRealLeft + 1.j*ChiImLeft
@@ -2094,8 +2195,6 @@ def get_spectra(X, E_in, p_dict, outputs=None):
 	else:
 		X = np.array(X)
 
-
-	
 	# Calculate E_field
 	E_out, R = get_Efield(X, E_in, Chi, p_dict)
 	#print 'Output E field (Z): \n', E_out[2]
@@ -2222,7 +2321,6 @@ def output_list():
 	"	
 	print(tstr)
 
-
 def main():
 	""" General test method """
 	
@@ -2281,13 +2379,14 @@ def test_equivalence():
 	print('chi2')
 	print((chiL2, chiR2, chiZ2))
 	
-if __name__ == '__main__':
-	test_equivalence()
-
+#if __name__ == '__main__':
+#	test_equivalence()
 
 Detuning=np.linspace(-10,10,1000)*1e3 #Detuning range between -10 and 10 GHz. Needs to be input in MHz
 E_in=np.array([1,0,0]) #Horizontal Linear Light input. We define E_in = [Ex,Ey,Ez]
-p_dict={'Elem':'Rb','Dline':'D2','T':19,'lcell':75e-3,'Bfield':0,'Btheta':0} #A 75 mm cell of natural abundance Rb at 20C. No bfield and hence no angle Btheta between the k-vector and the mag field. 
+p_dict={'Elem':'Ag','Dline':'D2','T':25,'lcell':75e-3,'Bfield':0,'Btheta':0} #A 75 mm cell of natural abundance Rb at 20C. No bfield and hence no angle Btheta between the k-vector and the mag field. 
 [S0,S1,S2,S3,E_out,Ix,Iy]=get_spectra(Detuning,E_in,p_dict,outputs=['S0','S1','S2','S3','E_out','Ix','Iy'])
 
-plt.plot(Detuning,S0)
+plt.plot(Detuning/1e3,S0)
+
+plt.show()
