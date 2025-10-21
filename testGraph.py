@@ -15,22 +15,12 @@ rcParams['mathtext.fontset'] = 'dejavuserif' # or 'cm', 'stix', 'custom'
 
 yData = np.load(r"C:\Users\Matt\Desktop\Lvl_4\Project\data.npy")#GHz
 xData = np.linspace(-10,10,1000)
-Temp = 19
+Temp = 100
 
 ############### 
 
 #328 nm D2 transition line
 #5s2S1/2 > 5p2P3/2
-
-#Detuning for transitions: 
-#
-#−2735.05, −2578.11, −2311.26 MHz
-#−1371.29, −1307.87, −1186.91 MHz
-#+1635.454, +1664.714, +1728.134 MHz
-#+4027.403, +4099.625, +4256.57 MHz
-#
-
-abundance85 = 0.7217
 
 ################################################################
 
@@ -45,34 +35,37 @@ from sympy.physics.wigner import wigner_6j
 
 
 # Physical constants
-
 c = 2.99792458e8
 kB = 1.380649e-23
 amu = 1.66053906660e-27
 
+# Ag D2 line parameters
 
-# Rb D2 line parameters
-
-lambda0 = 780.241e-9
+lambda0 = 328.0680e-9 #Kramida, A., Ralchenko, Yu., Reader, J., and NIST ASD Team (2024). NIST Atomic Spectra Database (ver. 5.12), [Online]. Available: https://physics.nist.gov/asd [2025, October 21]. National Institute of Standards and Technology, Gaithersburg, MD. DOI: https://doi.org/10.18434/T4W30F
 nu0 = c / lambda0
-Gamma_nat = 2 * np.pi * 6.066e6   # natural linewidth [rad/s]
-mass_Rb = 85 * amu
+
+abundance = 0.5184
+
+natural_linewidth = 1.4e8 #Hz
+
+Gamma_nat = 2 * np.pi * natural_linewidth   # natural linewidth [rad/s]
+mass_Rb = 107 * amu
 
 isotopes = {
-    "Rb85": {
-        "frac": abundance85,
-        "I": 5/2,
-        "A_g": 1011.910e6,
-        "A_e": 25.002e6,
-        "B_e": 25.790e6,
-        "shift": -63.4e6
+    "Ag107": {
+        "frac": abundance,
+        "I": 1/2,
+        "A_g": 1977e6,
+        "A_e": 75e6,
+        "B_e": 0,
+        "shift": -5476.6e6 #Uhlenberg et al
     },
-    "Rb87": {
-        "frac": 1-abundance85,
-        "I": 3/2,
-        "A_g": 3417.341e6,
-        "A_e": 84.7185e6,
-        "B_e": 12.4965e6,
+    "Ag109": {
+        "frac": 1-abundance,
+        "I": 1/2,
+        "A_g": 1977e6, #Uhlenberg et al
+        "A_e": 75e6, #Uhlenberg et al
+        "B_e": 0,
         "shift": 0.0
     }
 }
@@ -118,7 +111,7 @@ def rb_d2_transmission(T_C=Temp, detuning_GHz=10, show_components=True):
         A_g, A_e, B_e = iso["A_g"], iso["A_e"], iso["B_e"]
         frac = iso["frac"]
         shift = iso["shift"]
-        Jg, Je = 0.5, 1.5
+        Jg, Je = 0.5, 1.5##!!!!!
 
         ground = hyperfine_energies(I, Jg, A_g, 0)
         excited = hyperfine_energies(I, Je, A_e, B_e)
@@ -142,7 +135,7 @@ def rb_d2_transmission(T_C=Temp, detuning_GHz=10, show_components=True):
                     components.append((det_MHz, profile, label))
 
     # Convert absorption profiles into transmission dips
-    scale = 0.69 # optical depth scaling (adjust for deeper or shallower dips)
+    scale = 1 # optical depth scaling (adjust for deeper or shallower dips)
     T_total = np.exp(-scale * alpha_total / np.max(alpha_total))
 
     component_transmissions = []
@@ -215,7 +208,5 @@ img = mpimg.imread(r"C:\Users\Matt\Desktop\Lvl_4\Project\SilverD2Diagram.png")
 plt.imshow(img, extent=[-5, 5+adjust, 0.05, 0.5], aspect='auto', alpha=0.7)
 
 #plt.savefig(r"C:\Users\Matt\Desktop\Lvl_4\Project\voigt_combined.pdf", bbox_inches='tight')
-
-
 
 plt.show()
