@@ -42,37 +42,49 @@ amu = 1.66053906660e-27
 # Ag D2 line parameters
 # Transition 5s2S1/2 > 5p2P3/2
 
-lambda0 = 328.0680e-9 #Kramida, A., Ralchenko, Yu., Reader, J., and NIST ASD Team (2024). NIST Atomic Spectra Database (ver. 5.12), [Online]. Available: https://physics.nist.gov/asd [2025, October 21]. National Institute of Standards and Technology, Gaithersburg, MD. DOI: https://doi.org/10.18434/T4W30F
+
+#Kramida, A., Ralchenko, Yu., Reader, J., and NIST ASD Team (2024). NIST Atomic Spectra Database (ver. 5.12), [Online]. Available: https://physics.nist.gov/asd [2025, October 22]. National Institute of Standards and Technology, Gaithersburg, MD. DOI: https://doi.org/10.18434/T4W30F
+lambda0 = 328.1625e-9 #NIST vacuum wavelength
+Rblambda0 = 780.241e-9
 #^ Central transition frequency in m
 nu0 = c / lambda0
 
 natural_linewidth = 1.4e8 #[rad/s] as given on NIST
 
+Rb_nat = 2 * np.pi * 6.066e6
+
 Gamma_nat = natural_linewidth   # natural linewidth [rad/s]
-#^ converting natural linewidth from Hz to rad/s
 
-mass_Ag = 106.9050916 * amu
+mass_Ag = 107.8682 * amu #Standard atomic weight for silver from NIST
 
-abundance107 = 0.51839
+abundance107 = 0.51839 #NIST Ag107 abundace
+
+ratio1 = natural_linewidth / Rb_nat
+
+ratio2 = Rblambda0 / lambda0
+
+print( ratio1)
+
+print( ratio2 * 1.1)
 
 isotopes = {
     "Ag107": {
         "frac": abundance107,
         "I": 1/2,
-        "A_g": 1977e6*0.8637,
-        "A_e": (75e6/2)*0.8637,
-        "B_e": 0,
-        "shift": 476.6e6, #Uhlenberg et al 476.6
-        "mass": 106.9050916 * amu
+        "A_g": 1712.512111e6,#Zeitschrift fi.ir Physik 200, 456--466 (1967)
+        "A_e": 30.196e6,#From dodgy paper
+        "B_e": 0, #B = 0 for I = 1/2 #from dodgy paper
+        "shift": 476.6e6, #Uhlenberg et al 476.6 MHz
+        "mass": 106.9050916 * amu #NIST
     },
     "Ag109": {
         "frac": 1-abundance107,
         "I": 1/2,
-        "A_g": 1977e6, #Uhlenberg et al
-        "A_e": 75e6/2, #Uhlenberg et al
-        "B_e": 0,
+        "A_g": 1976.932075e6, #Zeitschrift fi.ir Physik 200, 456--466 (1967)
+        "A_e": 75e6/2, #Uhlenberg et al splitting = 75Mhz, Divide by 2 as splitting = 2A for excited state
+        "B_e": 0, #B = 0 for I = 1/2 #from dodgy paper
         "shift": 0.0,
-        "mass": 108.9047553 * amu
+        "mass": 108.9047553 * amu #NIST
     }
 }
 
@@ -200,7 +212,7 @@ plt.axhline(1, color='grey', lw=1)
 plt.ylabel("Transmission")
 plt.xlabel("Linear Detuning (GHz)")
 
-## Labels
+## Labels (Adding labels to go with the transition level diagram)
 
 adjust = 0.17
 
@@ -219,7 +231,7 @@ plt.text(x=5.5+adjust, y=0.37, s="1", fontsize=fontsz, ha = "left", va = "center
 plt.text(x=5.5+adjust, y=0.49, s="2", fontsize=fontsz, ha = "left", va = "center")#F'=2
 
 plt.text(x=6.5+adjust, y=0.12, s="$F$", fontsize=fontsz, ha = "left", va = "center")#F
-plt.text(x=6.5+adjust, y=0.44, s="$F^{\prime}$", fontsize=fontsz, ha = "left", va = "center")#F'
+plt.text(x=6.5+adjust, y=0.44, s="$F^'$", fontsize=fontsz, ha = "left", va = "center")#F'
 
 ##
 
