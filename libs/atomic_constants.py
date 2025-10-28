@@ -236,7 +236,7 @@ class Ag107_D2:
     #Hyperfine constants in units of MHz
     Ap = 32
     Bp = 0
-    IsotopeShift = 0#476.6 #MHz
+    IsotopeShift = 476.6 #MHz
 
 class Ag109_D2:
     """Constants relating to rubidium-87 and the D2 transition"""

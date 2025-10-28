@@ -2,10 +2,7 @@ from numpy import pi,append, transpose, identity
 
 from scipy.constants import physical_constants, epsilon_0, hbar
 
-
 from scipy.linalg import eigh
-
-
 
 from libs import atomic_constants as ac
 from libs import LSI_funcs as lsi
