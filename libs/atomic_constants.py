@@ -52,8 +52,8 @@ class Rb87:
 class Ag107:
     """Constants for silver-107 atom"""
     I = 0.5
-    As = 1977.0 * 0.8637  # MHz (ground-state hyperfine A constant, Uhlenberg et al 2000)
-    gI = 1.234e-4   # convert nuclear g to Bohr magneton units
+    As = 1712.512111  # MHz (ground-state hyperfine A constant, Uhlenberg et al 2000)
+    gI = -0.11357   # convert nuclear g to Bohr magneton units
     mass = 106.90509 * amu
     FS = 0.0  # you can leave this 0 since Ag D1/D2 FS isn't used in practice
 
@@ -61,7 +61,7 @@ class Ag109:
     """Constants for silver-109 atom"""
     I = 0.5
     As = 1977.0  # scaled by ratio of nuclear magnetic moments
-    gI = 1.426e-4
+    gI = -0.1306905
     mass = 108.904755 * amu
     FS = 0.0
 
@@ -125,11 +125,11 @@ class RbD2Transition:
 
 class AgD2Transition:
     """Constants relating to the silver D2 transition"""
-    wavelength=328.0680e-9
+    wavelength=328.1625e-9#m
     wavevectorMagnitude=2.0*pi/wavelength
-    NatGamma=22.28
+    NatGamma=1.4e8/1e6
     dipoleStrength=3.0*sqrt(e0*hbar*(2.0*NatGamma*(10.0**6))*(wavelength**3)/(8.0*pi))
-    v0= 9.1342e14
+    v0= c/wavelength
 
 class CsD1Transition:
     """Constants relating to the caesium D1 transition"""
@@ -234,14 +234,14 @@ class Rb87_D2:
 class Ag107_D2:
     """Constants relating to rubidium-85 and the D2 transition"""
     #Hyperfine constants in units of MHz
-    Ap = (75/2)*0.8637
+    Ap = 32
     Bp = 0
-    IsotopeShift = 476.6 #MHz
+    IsotopeShift = 0#476.6 #MHz
 
 class Ag109_D2:
     """Constants relating to rubidium-87 and the D2 transition"""
     #Hyperfine constants in units of MHz
-    Ap = 75e6/2
+    Ap = 37.5
     Bp = 0
     IsotopeShift = 0 #MHz
 

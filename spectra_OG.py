@@ -1,27 +1,53 @@
-import numpy as np
-from numpy import zeros,sqrt,pi,dot,exp,array,amax,arange,concatenate,argmin, matmul
-import matplotlib.pyplot as plt
+# Copyright 2014-2018 M. A. Zentile, J. Keaveney, L. Weller, D. Whiting,
+# C. S. Adams and I. G. Hughes.
 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#	 http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Module containing functions to calculate the spectra
+
+Constructs the electric susceptibility and then returns
+the spectrum requested
+
+Last updated 2018-07-12 MAZ
+"""
+# py 2.7 compatibility
+from __future__ import (division, print_function, absolute_import)
+
+from numpy import zeros,sqrt,pi,dot,exp,sin,cos,array,amax,arange,concatenate,argmin,matmul
+import numpy as np
 from scipy.special import wofz
 from scipy.interpolate import interp1d
 
-from scipy.constants import physical_constants, epsilon_0, hbar, c, h
+import os
+import sys
+import inspect
+cmd_folder = os.path.realpath(os.path.abspath(os.path.split(inspect.getfile( inspect.currentframe() ))[0]))
+if cmd_folder not in sys.path:
+    sys.path.insert(0, cmd_folder)
 
-S=0.5 #Electron spin
-gs = -physical_constants['electron g factor'][0]
-muB=physical_constants['Bohr magneton'][0] 
-kB=physical_constants['Boltzmann constant'][0] 
-amu=physical_constants['atomic mass constant'][0] #An atomic mass unit in kg
-e0=epsilon_0 #Permittivity of free space
-a0=physical_constants['Bohr radius'][0]
-kB = physical_constants['Boltzmann constant'][0]
+from FundamentalConstants import *
+from numberDensityEqs import *
 
-from libs import atomic_constants as ac
-from libs import numDensity as nd
-from libs import solve_diel as solvd
-from libs import rotations as rot
-from libs import Hamiltonian as ht
-from libs import convert_basis as cb
+import EigenSystem as ES
+import AtomConstants as AC
+import RotationMatrices as RM
+import BasisChanger as BC
+import JonesMatrices as JM
+import solve_dielectric as SD
+
+# direct testing
+import matplotlib.pyplot as plt
 
 # Default values for parameters
 p_dict_defaults = {	'Elem':'Rb', 'Dline':'D2', 
@@ -32,8 +58,8 @@ p_dict_defaults = {	'Elem':'Rb', 'Dline':'D2',
 							# B-field angle w.r.t. light k-vector
 							'Btheta':0, 'Bphi':0,
 							'Constrain':True, 'DoppTemp':20.,
-							'rb85frac':72.17, 'K40frac':0.01, 'K41frac':6.73,'Ag107frac':51.839,
-							'BoltzmannFactor':True, 'AgNumden': 1e16}
+							'rb85frac':72.17, 'K40frac':0.01, 'K41frac':6.73,
+							'BoltzmannFactor':True}
 
 def FreqStren(groundLevels,excitedLevels,groundDim,
 			  excitedDim,Dline,hand,BoltzmannFactor=True,T=293.16):
@@ -46,10 +72,6 @@ def FreqStren(groundLevels,excitedLevels,groundDim,
 	transitionStrength = zeros(groundDim*2*groundDim)
 	transNo = 0
 	
-	groundLevelsT = []
-	excitedLevelsT = []
-	transitionFrequencyT = []
-
 	## Boltzmann factor: -- only really needed when energy splitting of ground state is large
 	if BoltzmannFactor:
 		groundEnergies = array(groundLevels)[:,0].real
@@ -81,14 +103,11 @@ def FreqStren(groundLevels,excitedLevels,groundDim,
 		for ee in interatorList:
 			cleb = dot(groundLevels[gg][1:],excitedLevels[ee][bottom:top]).real
 			cleb2 = cleb*cleb
-			if cleb2 > 0.0005: #If negligible don't calculate.
+			if cleb2 > 0.0005: #If negligable don't calculate.
 				transitionFrequency[transNo] = int((-groundLevels[gg][0].real
 											  +excitedLevels[ee][0].real))
 				# We choose to perform the ground manifold reduction (see
 				# equation (4) in manual) here for convenience.
-				transitionFrequencyT.append(transitionFrequency[transNo])
-				groundLevelsT.append(groundLevels[gg][0].real)
-				excitedLevelsT.append(excitedLevels[ee][0].real)
 				
 				## Boltzmann factor:
 				if BoltzmannFactor: 
@@ -96,16 +115,12 @@ def FreqStren(groundLevels,excitedLevels,groundDim,
 				else:
 					transitionStrength[transNo] = 1./3 * cleb2 * 1./groundDim
 				
-				print(f"  Transition {transNo}: ground={gg}, excited={ee}, "
-          		f"ΔE={transitionFrequency[transNo]:.2f} MHz, strength={transitionStrength[transNo]:.3e}")
-
 				transNo += 1
 
 	#print 'No transitions (ElecSus): ',transNo
-	print(f"[FreqStren] {Dline} {hand} → {transNo} hyperfine transitions found")
 	return transitionFrequency, transitionStrength, transNo
 
-def add_voigt_old(d,DoppTemp,atomMass,wavenumber,gamma,voigtwidth,
+def add_voigt(d,DoppTemp,atomMass,wavenumber,gamma,voigtwidth,
 		ltransno,lenergy,lstrength,
 		rtransno,renergy,rstrength,
 		ztransno,zenergy,zstrength):
@@ -127,32 +142,7 @@ def add_voigt_old(d,DoppTemp,atomMass,wavenumber,gamma,voigtwidth,
 	f_ab = interp1d(detune,ab)
 	f_disp = interp1d(detune,disp)
 	
-	'''
-	# Example: only compute the nth transition
-	n = 0  # or any valid index
-
-	lab = zeros(xpts)
-	ldisp = zeros(xpts)
-	if n < ltransno:
-		xc = lenergy[n]
-		lab += lstrength[n]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		ldisp += lstrength[n]*f_disp(2.0*pi*(d-xc)*1.0e6)
-
-	rab = zeros(xpts)
-	rdisp = zeros(xpts)
-	if n < rtransno:
-		xc = renergy[n]
-		rab += rstrength[n]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		rdisp += rstrength[n]*f_disp(2.0*pi*(d-xc)*1.0e6)
-
-	zab = zeros(xpts)
-	zdisp = zeros(xpts)
-	if n < ztransno:
-		xc = zenergy[n]
-		zab += zstrength[n]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		zdisp += zstrength[n]*f_disp(2.0*pi*(d-xc)*1.0e6)
-	'''
-
+	#Add contributions from all transitions to user defined detuning axis
 	lab = zeros(xpts)
 	ldisp = zeros(xpts)
 	for line in range(ltransno+1):
@@ -171,127 +161,7 @@ def add_voigt_old(d,DoppTemp,atomMass,wavenumber,gamma,voigtwidth,
 		xc = zenergy[line]
 		zab += zstrength[line]*f_ab(2.0*pi*(d-xc)*1.0e6)
 		zdisp += zstrength[line]*f_disp(2.0*pi*(d-xc)*1.0e6)
-	
 	return lab, ldisp, rab, rdisp, zab, zdisp
-	
-	
-	'''
-
-	lab_components = []
-	ldisp_components = []
-	lab_total = zeros(xpts)
-	ldisp_total = zeros(xpts)
-	for line in range(ltransno):
-		xc = lenergy[line]
-		abs_line = lstrength[line] * f_ab(2.0*pi*(d-xc)*1.0e6)
-		disp_line = lstrength[line] * f_disp(2.0*pi*(d-xc)*1.0e6)
-		lab_components.append(abs_line)
-		ldisp_components.append(disp_line)
-		lab_total += abs_line
-		ldisp_total += disp_line
-
-	rab_components = []
-	rdisp_components = []
-	rab_total = zeros(xpts)
-	rdisp_total = zeros(xpts)
-	for line in range(rtransno):
-		xc = renergy[line]
-		abs_line = rstrength[line] * f_ab(2.0*pi*(d-xc)*1.0e6)
-		disp_line = rstrength[line] * f_disp(2.0*pi*(d-xc)*1.0e6)
-		rab_components.append(abs_line)
-		rdisp_components.append(disp_line)
-		rab_total += abs_line
-		rdisp_total += disp_line
-
-	zab_components = []
-	zdisp_components = []
-	zab_total = zeros(xpts)
-	zdisp_total = zeros(xpts)
-	for line in range(ztransno):
-		xc = zenergy[line]
-		abs_line = zstrength[line] * f_ab(2.0*pi*(d-xc)*1.0e6)
-		disp_line = zstrength[line] * f_disp(2.0*pi*(d-xc)*1.0e6)
-		zab_components.append(abs_line)
-		zdisp_components.append(disp_line)
-		zab_total += abs_line
-		zdisp_total += disp_line
-
-	return (
-		lab_total, ldisp_total,
-		rab_total, rdisp_total,
-		zab_total, zdisp_total,
-		lab_components, ldisp_components,
-		rab_components, rdisp_components,
-		zab_components, zdisp_components
-	)
-	'''
-
-def add_voigt(d, DoppTemp, atomMass, wavenumber, gamma, voigtwidth,
-              ltransno, lenergy, lstrength,
-              rtransno, renergy, rstrength,
-              ztransno, zenergy, zstrength):
-    """
-    Computes individual Voigt profiles for each transition and stores them
-    in 2D arrays of shape (n_transitions + 1, xpts), where the last row
-    contains the summed total profile.
-    """
-
-    from scipy.special import wofz
-    from scipy.interpolate import interp1d
-    import numpy as np
-
-    xpts = len(d)
-    npts = 2 * voigtwidth + 1
-    detune = 2.0 * np.pi * 1.0e6 * (np.arange(npts) - voigtwidth)  # Angular detuning (2π Hz)
-    wavenumber = wavenumber + detune / c  # Allow wavenumber to vary (large detuning)
-    u = np.sqrt(2.0 * kB * DoppTemp / atomMass)
-    ku = wavenumber * u
-
-    # Faddeeva (complex error) function
-    a = gamma / ku
-    b = detune / ku
-    y = 1.0j * (0.5 * np.sqrt(np.pi) / ku) * wofz(b + 0.5j * a)
-    ab = y.imag
-    disp = y.real
-
-    # Interpolators
-    f_ab = interp1d(detune, ab, fill_value="extrapolate")
-    f_disp = interp1d(detune, disp, fill_value="extrapolate")
-
-    # --- Allocate 2D arrays ---
-    lab = np.zeros((ltransno + 1, xpts))
-    ldisp = np.zeros((ltransno + 1, xpts))
-    rab = np.zeros((rtransno + 1, xpts))
-    rdisp = np.zeros((rtransno + 1, xpts))
-    zab = np.zeros((ztransno + 1, xpts))
-    zdisp = np.zeros((ztransno + 1, xpts))
-
-    # --- Compute Voigt profiles per transition ---
-    for i in range(ltransno):
-        xc = lenergy[i]
-        lab[i, :] = lstrength[i] * f_ab(2.0 * np.pi * (d - xc) * 1.0e6)
-        ldisp[i, :] = lstrength[i] * f_disp(2.0 * np.pi * (d - xc) * 1.0e6)
-
-    for i in range(rtransno):
-        xc = renergy[i]
-        rab[i, :] = rstrength[i] * f_ab(2.0 * np.pi * (d - xc) * 1.0e6)
-        rdisp[i, :] = rstrength[i] * f_disp(2.0 * np.pi * (d - xc) * 1.0e6)
-
-    for i in range(ztransno):
-        xc = zenergy[i]
-        zab[i, :] = zstrength[i] * f_ab(2.0 * np.pi * (d - xc) * 1.0e6)
-        zdisp[i, :] = zstrength[i] * f_disp(2.0 * np.pi * (d - xc) * 1.0e6)
-
-    # --- Compute summed total and store as last row ---
-    lab[-1, :] = lab[:-1, :].sum(axis=0)
-    ldisp[-1, :] = ldisp[:-1, :].sum(axis=0)
-    rab[-1, :] = rab[:-1, :].sum(axis=0)
-    rdisp[-1, :] = rdisp[:-1, :].sum(axis=0)
-    zab[-1, :] = zab[:-1, :].sum(axis=0)
-    zdisp[-1, :] = zdisp[:-1, :].sum(axis=0)
-
-    return lab[-1], ldisp[-1], rab[-1], rdisp[-1], zab[-1], zdisp[-1]
-
 
 def calc_chi(X, p_dict,verbose=False):			   
 	"""
@@ -379,10 +249,6 @@ def calc_chi(X, p_dict,verbose=False):
 		K41frac = p_dict['K41frac']
 	else:
 		K41frac = p_dict_defaults['K41frac']
-	if 'Ag107frac' in list(p_dict.keys()):
-		Ag107frac = p_dict['Ag107frac']
-	else:
-		Ag107frac = p_dict_defaults['Ag107frac']
 	if 'BoltzmannFactor' in list(p_dict.keys()):
 		BoltzmannFactor =  p_dict['BoltzmannFactor']
 	else:
@@ -398,8 +264,6 @@ def calc_chi(X, p_dict,verbose=False):
 	K40frac  = K40frac/100.0
 	K41frac  = K41frac/100.0
 
-	Ag107frac = Ag107frac/100.0
-
 	if Bfield==0.0:
 		Bfield = 0.0001 #To avoid degeneracy problem at B = 0.
 
@@ -407,9 +271,9 @@ def calc_chi(X, p_dict,verbose=False):
 	if Elem=='Rb':
 		rb87frac=1.0-rb85frac  # Rubidium-87 fraction
 		if rb85frac!=0.0: #Save time if no rubidium-85 required
-			Rb85atom = ac.Rb85
+			Rb85atom = AC.Rb85
 			#Hamiltonian(isotope,transition,gL,Bfield)
-			Rb85_ES = ht.Hamiltonian('Rb85',Dline,1.0,Bfield)
+			Rb85_ES = ES.Hamiltonian('Rb85',Dline,1.0,Bfield)
 
 			# Rb-85 allowed transitions for light driving sigma minus
 			lenergy85, lstrength85, ltransno85 = FreqStren(
@@ -431,10 +295,12 @@ def calc_chi(X, p_dict,verbose=False):
 													Rb85_ES.excitedManifold,
 													Rb85_ES.ds,Rb85_ES.dp,
 													Dline,'Z',BoltzmannFactor,T+273.16)
+			
+
 		if rb87frac!=0.0:
-			Rb87atom = ac.Rb87
+			Rb87atom = AC.Rb87
 			#Hamiltonian(isotope,transition,gL,Bfield)
-			Rb87_ES = ht.Hamiltonian('Rb87',Dline,1.0,Bfield)
+			Rb87_ES = ES.Hamiltonian('Rb87',Dline,1.0,Bfield)
 			# Rb-87 allowed transitions for light driving sigma minus
 			lenergy87, lstrength87, ltransno87 = FreqStren(
 													Rb87_ES.groundManifold,
@@ -454,11 +320,15 @@ def calc_chi(X, p_dict,verbose=False):
 													Rb87_ES.groundManifold,
 													Rb87_ES.excitedManifold,
 													Rb87_ES.ds,Rb87_ES.dp,
-													Dline,'Z',BoltzmannFactor,T+273.16)										
+													Dline,'Z',BoltzmannFactor,T+273.16)
+													
+			
+													
 		if Dline=='D1':
-			transitionConst = ac.RbD1Transition
+			transitionConst = AC.RbD1Transition
 		elif Dline=='D2':
-			transitionConst = ac.RbD2Transition
+			transitionConst = AC.RbD2Transition
+
 		if (rb85frac!=0.0) and (rb87frac!=0.0):
 			AllEnergyLevels = concatenate((lenergy87,lenergy85,
 														renergy87,renergy85,
@@ -470,8 +340,8 @@ def calc_chi(X, p_dict,verbose=False):
 
 	# Caesium energy levels
 	elif Elem=='Cs':
-		CsAtom = ac.Cs
-		Cs_ES = ht.Hamiltonian('Cs',Dline,1.0,Bfield)
+		CsAtom = AC.Cs
+		Cs_ES = ES.Hamiltonian('Cs',Dline,1.0,Bfield)
 
 		lenergy, lstrength, ltransno = FreqStren(Cs_ES.groundManifold,
 												 Cs_ES.excitedManifold,
@@ -487,15 +357,15 @@ def calc_chi(X, p_dict,verbose=False):
 												 'Z',BoltzmannFactor,T+273.16)
 
 		if Dline=='D1':
-			transitionConst = ac.CsD1Transition
+			transitionConst = AC.CsD1Transition
 		elif Dline =='D2':
-			transitionConst = ac.CsD2Transition
+			transitionConst = AC.CsD2Transition
 		AllEnergyLevels = concatenate((lenergy,renergy,zenergy))
 
 	# Sodium energy levels
 	elif Elem=='Na':
-		NaAtom = ac.Na
-		Na_ES = ht.Hamiltonian('Na',Dline,1.0,Bfield)
+		NaAtom = AC.Na
+		Na_ES = ES.Hamiltonian('Na',Dline,1.0,Bfield)
 
 		lenergy, lstrength, ltransno = FreqStren(Na_ES.groundManifold,
 												 Na_ES.excitedManifold,
@@ -510,17 +380,17 @@ def calc_chi(X, p_dict,verbose=False):
 												 Na_ES.ds,Na_ES.dp,Dline,
 												 'Z',BoltzmannFactor,T+273.16)												 
 		if Dline=='D1':
-			transitionConst = ac.NaD1Transition
+			transitionConst = AC.NaD1Transition
 		elif Dline=='D2':
-			transitionConst = ac.NaD2Transition
+			transitionConst = AC.NaD2Transition
 		AllEnergyLevels = concatenate((lenergy,renergy,zenergy))
 
 	#Potassium energy levels <<<<< NEED TO ADD Z-COMPONENT >>>>>
 	elif Elem=='K':
 		K39frac=1.0-K40frac-K41frac #Potassium-39 fraction
 		if K39frac!=0.0:
-			K39atom = ac.K39
-			K39_ES = ht.Hamiltonian('K39',Dline,1.0,Bfield)
+			K39atom = AC.K39
+			K39_ES = ES.Hamiltonian('K39',Dline,1.0,Bfield)
 			
 			lenergy39, lstrength39, ltransno39 = FreqStren(
 													K39_ES.groundManifold,
@@ -537,8 +407,8 @@ def calc_chi(X, p_dict,verbose=False):
 													K39_ES.ds,K39_ES.dp,Dline,
 													'Z',BoltzmannFactor,T+273.16)
 		if K40frac!=0.0:
-			K40atom = ac.K40
-			K40_ES = ht.Hamiltonian('K40',Dline,1.0,Bfield)
+			K40atom = AC.K40
+			K40_ES = ES.Hamiltonian('K40',Dline,1.0,Bfield)
 			
 			lenergy40, lstrength40, ltransno40 = FreqStren(
 													K40_ES.groundManifold,
@@ -555,8 +425,8 @@ def calc_chi(X, p_dict,verbose=False):
 													K40_ES.ds,K40_ES.dp,Dline,
 													'Z',BoltzmannFactor,T+273.16)
 		if K41frac!=0.0:
-			K41atom = ac.K41
-			K41_ES = ht.Hamiltonian('K41',Dline,1.0,Bfield)
+			K41atom = AC.K41
+			K41_ES = ES.Hamiltonian('K41',Dline,1.0,Bfield)
 			
 			lenergy41, lstrength41, ltransno41 = FreqStren(
 													K41_ES.groundManifold,
@@ -573,9 +443,9 @@ def calc_chi(X, p_dict,verbose=False):
 													K41_ES.ds,K41_ES.dp,Dline,
 													'Z',BoltzmannFactor,T+273.16)
 		if Dline=='D1':
-			transitionConst = ac.KD1Transition
+			transitionConst = AC.KD1Transition
 		elif Dline=='D2':
-			transitionConst = ac.KD2Transition
+			transitionConst = AC.KD2Transition
 		if K39frac!=0.0:
 			AllEnergyLevels = concatenate((lenergy39,renergy39,zenergy39))
 		if K40frac!=0.0 and K39frac!=0.0:
@@ -587,77 +457,11 @@ def calc_chi(X, p_dict,verbose=False):
 		elif K41frac!=0.0 and (K39frac==0.0 and K40frac==0.0):
 			AllEnergyLevels = concatenate((lenergy41,renergy41,zenergy41))
 
-	# Silver energy levels
-	elif Elem == 'Ag':
-		# Define isotope(s)
-		Ag109frac = 1.0 - Ag107frac
-		if Ag107frac != 0.0:
-			Ag107atom = ac.Ag107
-			Ag107_ES = ht.Hamiltonian('Ag107', Dline, 1.0, Bfield)
-
-			lenergy107, lstrength107, ltransno107 = FreqStren(
-				Ag107_ES.groundManifold,
-				Ag107_ES.excitedManifold,
-				Ag107_ES.ds, Ag107_ES.dp, Dline,
-				'Left', BoltzmannFactor, T + 273.16
-			)
-			renergy107, rstrength107, rtransno107 = FreqStren(
-				Ag107_ES.groundManifold,
-				Ag107_ES.excitedManifold,
-				Ag107_ES.ds, Ag107_ES.dp, Dline,
-				'Right', BoltzmannFactor, T + 273.16
-			)
-			zenergy107, zstrength107, ztransno107 = FreqStren(
-				Ag107_ES.groundManifold,
-				Ag107_ES.excitedManifold,
-				Ag107_ES.ds, Ag107_ES.dp, Dline,
-				'Z', BoltzmannFactor, T + 273.16
-			)
-		if Ag109frac != 0.0:
-			Ag109atom = ac.Ag109
-			Ag109_ES = ht.Hamiltonian('Ag109', Dline, 1.0, Bfield)
-
-			lenergy109, lstrength109, ltransno109 = FreqStren(
-				Ag109_ES.groundManifold,
-				Ag109_ES.excitedManifold,
-				Ag109_ES.ds, Ag109_ES.dp, Dline,
-				'Left', BoltzmannFactor, T + 273.16
-			)
-			renergy109, rstrength109, rtransno109 = FreqStren(
-				Ag109_ES.groundManifold,
-				Ag109_ES.excitedManifold,
-				Ag109_ES.ds, Ag109_ES.dp, Dline,
-				'Right', BoltzmannFactor, T + 273.16
-			)
-			zenergy109, zstrength109, ztransno109 = FreqStren(
-				Ag109_ES.groundManifold,
-				Ag109_ES.excitedManifold,
-				Ag109_ES.ds, Ag109_ES.dp, Dline,
-				'Z', BoltzmannFactor, T + 273.16
-			)
-		# Choose transition constants for the selected D-line
-		if Dline == 'D2':
-			transitionConst = ac.AgD2Transition
-		else:
-			raise ValueError("Only D2 data available for Ag")
-		# Combine isotope contributions
-		if Ag107frac != 0.0 and Ag109frac != 0.0:
-			AllEnergyLevels = concatenate((lenergy107, lenergy109,
-								  			renergy107,renergy109,
-											zenergy107, zenergy109))
-		elif (Ag107frac!=0.0) and (Ag109frac==0.0):
-			AllEnergyLevels = concatenate((lenergy107, renergy107, zenergy107))
-		elif (Ag107frac==0.0) and (Ag109frac!=0.0):
-			AllEnergyLevels = concatenate((lenergy109, renergy109, zenergy109))
-
 #Calculate Voigt
-
 	if Constrain:
 		DoppTemp = T #Set doppler temperature to the number density temperature
 	T += 273.15
 	DoppTemp += 273.15
-
-	print(T,DoppTemp)
 
 	# For thin cells: Don't add Doppler effect, by setting DopplerTemperature to near-zero
 	# can then convolve with different velocity distribution later on
@@ -667,19 +471,13 @@ def calc_chi(X, p_dict,verbose=False):
 	maxdev = amax(abs(d))
 
 	if Elem=='Rb':
-		NDensity=nd.numDenRb(T) #Calculate number density
+		NDensity=numDenRb(T) #Calculate number density
 	elif Elem=='Cs':
-		NDensity=nd.numDenCs(T)
+		NDensity=numDenCs(T)
 	elif Elem=='K':
-		NDensity=nd.numDenK(T)
+		NDensity=numDenK(T)
 	elif Elem=='Na':
-		NDensity=nd.numDenNa(T)
-	elif Elem== 'Ag':
-		if 'AgNumden' in list(p_dict.keys()):
-			NDensity = p_dict['AgNumden']
-		else:
-			NDensity= p_dict_defaults['AgNumden']
-		print(NDensity)
+		NDensity=numDenNa(T)
 
 	#Calculate lorentzian broadening and shifts
 	gamma0 = 2.0*pi*transitionConst.NatGamma*1.e6
@@ -724,6 +522,8 @@ def calc_chi(X, p_dict,verbose=False):
 		ChiImLeft = prefactor*(rb85frac*lab85+rb87frac*lab87)
 		ChiImRight = prefactor*(rb85frac*rab85+rb87frac*rab87)
 		ChiImZ = prefactor*(rb85frac*zab85 + rb87frac*zab87)
+		
+
 	elif Elem=='Cs':
 		lab, ldisp, rab, rdisp, zab, zdisp = 0,0,0,0,0,0
 		lab, ldisp, rab, rdisp, zab, zdisp = add_voigt(d,DoppTemp,CsAtom.mass,wavenumber,
@@ -785,124 +585,13 @@ def calc_chi(X, p_dict,verbose=False):
 		ChiImLeft = prefactor*(K39frac*lab39+K40frac*lab40+K41frac*lab41)
 		ChiImRight = prefactor*(K39frac*rab39+K40frac*rab40+K41frac*rab41)
 		ChiImZ = prefactor*(K39frac*zab39+K40frac*zab40+K41frac*zab41)
-	elif Elem == 'Ag':
 
-		# Initialise all Lorentzian/dispersion components
-		lab107, ldisp107, rab107, rdisp107, zab107, zdisp107 = 0,0,0,0,0,0
-		lab109, ldisp109, rab109, rdisp109, zab109, zdisp109 = 0,0,0,0,0,0
-
-		# --- Add isotope-resolved Voigt profiles ---
-		if Ag107frac != 0.0:
-			(lab107, ldisp107,
-			rab107, rdisp107,
-			zab107, zdisp107) = add_voigt(
-				d, DoppTemp, Ag107atom.mass, wavenumber,
-				gamma, voigtwidth,
-				ltransno107, lenergy107, lstrength107,
-				rtransno107, renergy107, rstrength107,
-				ztransno107, zenergy107, zstrength107
-			)
-
-		'''
-		,
-			lab_components107, ldisp_components107,
-			rab_components107, rdisp_components107,
-			zab_components107, zdisp_components107
-		
-		'''
-
-		if Ag109frac != 0.0:
-			(lab109, ldisp109,
-			rab109, rdisp109,
-			zab109, zdisp109) = add_voigt(
-				d, DoppTemp, Ag109atom.mass, wavenumber,
-				gamma, voigtwidth,
-				ltransno109, lenergy109, lstrength109,
-				rtransno109, renergy109, rstrength109,
-				ztransno109, zenergy109, zstrength109
-			)
-
-		'''
-		
-		,
-			lab_components109, ldisp_components109,
-			rab_components109, rdisp_components109,
-			zab_components109, zdisp_components109
-		
-		
-		'''
-
-		# --- Build total susceptibility ---
-		ChiRealLeft  = prefactor * (Ag107frac * ldisp107 + Ag109frac * ldisp109)
-		ChiRealRight = prefactor * (Ag107frac * rdisp107 + Ag109frac * rdisp109)
-		ChiRealZ     = prefactor * (Ag107frac * zdisp107 + Ag109frac * zdisp109)
-
-		ChiImLeft  = prefactor * (Ag107frac * lab107 + Ag109frac * lab109)
-		ChiImRight = prefactor * (Ag107frac * rab107 + Ag109frac * rab109)
-		ChiImZ     = prefactor * (Ag107frac * zab107 + Ag109frac * zab109)
-
-		'''
-		# --- Store per-Voigt susceptibilities as tuples (Chi_plus, Chi_minus, Chi_z) ---
-		voigt_components = {}
-
-		if Ag107frac != 0.0:
-			num_lines = max(len(lab_components107), len(rab_components107), len(zab_components107))
-			for i in range(num_lines):
-				Chi_plus_i  = prefactor * Ag107frac * (ldisp_components107[i] + 1j * lab_components107[i])  if i < len(lab_components107) else np.zeros_like(d)
-				Chi_minus_i = prefactor * Ag107frac * (rdisp_components107[i] + 1j * rab_components107[i])  if i < len(rab_components107) else np.zeros_like(d)
-				Chi_z_i     = prefactor * Ag107frac * (zdisp_components107[i] + 1j * zab_components107[i])  if i < len(zab_components107) else np.zeros_like(d)
-				voigt_components[f"Ag107_{i+1}"] = (Chi_plus_i, Chi_minus_i, Chi_z_i)
-
-		if Ag109frac != 0.0:
-			num_lines = max(len(lab_components109), len(rab_components109), len(zab_components109))
-			for i in range(num_lines):
-				Chi_plus_i  = prefactor * Ag109frac * (ldisp_components109[i] + 1j * lab_components109[i])  if i < len(lab_components109) else np.zeros_like(d)
-				Chi_minus_i = prefactor * Ag109frac * (rdisp_components109[i] + 1j * rab_components109[i])  if i < len(rab_components109) else np.zeros_like(d)
-				Chi_z_i     = prefactor * Ag109frac * (zdisp_components109[i] + 1j * zab_components109[i])  if i < len(zab_components109) else np.zeros_like(d)
-				voigt_components[f"Ag109_{i+1}"] = (Chi_plus_i, Chi_minus_i, Chi_z_i)
-
-		# --- Reconstruct total susceptibility ---
-
-		'''
-
-
-		#return totalChiPlus, totalChiMinus, totalChiZ, voigt_components
+	# Reconstruct total susceptibility and index of refraction
+	totalChiPlus = ChiRealLeft + 1.j*ChiImLeft
+	totalChiMinus = ChiRealRight + 1.j*ChiImRight
+	totalChiZ = ChiRealZ + 1.j*ChiImZ
 	
-	totalChiPlus  = ChiRealLeft  + 1j * ChiImLeft
-	totalChiMinus = ChiRealRight + 1j * ChiImRight
-	totalChiZ     = ChiRealZ     + 1j * ChiImZ
-
 	return totalChiPlus, totalChiMinus, totalChiZ
-
-
-"""
-# --- Compute transmission for each Voigt component ---
-		# Normalise by the maximum total absorption (for scaling similar to your plotting script)
-
-		# --- Compute transmission for each Voigt component ---
-		voigt_transmissions = {}
-
-		def safe_transmission(arr):
-			if np.max(arr) != 0:
-				return np.exp(-arr / np.max(arr))  # absorption → transmission
-			else:
-				return np.ones_like(arr)
-
-		# Ag107
-		for tag in ['lab107', 'rab107', 'zab107']:
-			if tag in locals():
-				arr = locals()[tag]  # get array from current function scope
-				voigt_transmissions[f"T_{tag[0]}107"] = safe_transmission(arr)
-
-		# Ag109
-		for tag in ['lab109', 'rab109', 'zab109']:
-			if tag in locals():
-				arr = locals()[tag]
-				voigt_transmissions[f"T_{tag[0]}109"] = safe_transmission(arr)
-
-		voigt_components = {**voigt_transmissions}
-"""
-
 
 def get_Efield(X, E_in, Chi, p_dict, verbose=False):
 	""" 
@@ -1007,7 +696,7 @@ def get_Efield(X, E_in, Chi, p_dict, verbose=False):
 		Btheta += np.pi
 	
 	# get wavenumber
-	transition = ac.transitions[Elem+Dline]
+	transition = AC.transitions[Elem+Dline]
 	wavenumber = transition.wavevectorMagnitude * wavevector_dirn
 
 	# get susceptibility (already calculated, input to this method)
@@ -1015,10 +704,10 @@ def get_Efield(X, E_in, Chi, p_dict, verbose=False):
 
 	# Rotate initial Electric field so that B field lies in x-z plane
 	# (Effective polarisation rotation)
-	E_xz = rot.rotate_around_z(E_in.T,Bphi)
+	E_xz = RM.rotate_around_z(E_in.T,Bphi)
 		
 	# Find eigen-vectors for propagation and create rotation matrix
-	RM_ary, n1, n2 = solvd.solve_diel(ChiPlus,ChiMinus,ChiZ,Btheta,Bfield)
+	RM_ary, n1, n2 = SD.solve_diel(ChiPlus,ChiMinus,ChiZ,Btheta,Bfield)
 
 	# take conmplex conjugate of rotation matrix
 	RM_ary = RM_ary.conjugate()
@@ -1052,7 +741,7 @@ def get_Efield(X, E_in, Chi, p_dict, verbose=False):
 
 	ary_of_RMI_ary = np.linalg.inv(np.transpose(RM_ary.T,(0,2,1))) #Gives full array of RMI matrices
 	fast_E_out_xz = matmul(matmul(matmul(ary_of_RMI_ary,PropMat.T),np.transpose(RM_ary.T,(0,2,1))),E_xz)
-	fast_E_out = rot.rotate_around_z2(np.transpose(fast_E_out_xz,(0,2,1))[::,0],-Bphi) 
+	fast_E_out = RM.rotate_around_z2(np.transpose(fast_E_out_xz,(0,2,1))[::,0],-Bphi) 
 
 	#print 'E out [0]: ',E_out[0]
 	#print 'E out shape: ',E_out.shape
@@ -1158,12 +847,11 @@ def get_spectra(X, E_in, p_dict, outputs=None):
 		Pol = p_dict_defaults['Pol']
 
 	# get wavenumber
-	transition = ac.transitions[Elem+Dline]
+	transition = AC.transitions[Elem+Dline]
 
 	wavenumber = transition.wavevectorMagnitude
 	
 	# Calculate Susceptibility
-	#ChiPlus, ChiMinus, ChiZ, voigt_components = calc_chi(X, p_dict)
 	ChiPlus, ChiMinus, ChiZ = calc_chi(X, p_dict)
 	Chi = [ChiPlus, ChiMinus, ChiZ]
 	
@@ -1178,6 +866,8 @@ def get_spectra(X, E_in, p_dict, outputs=None):
 	else:
 		X = np.array(X)
 
+
+	
 	# Calculate E_field
 	E_out, R = get_Efield(X, E_in, Chi, p_dict)
 	#print 'Output E field (Z): \n', E_out[2]
@@ -1198,31 +888,8 @@ def get_spectra(X, E_in, p_dict, outputs=None):
 	Iz = (E_out[2] * E_out[2].conjugate()).real / I_in
 	
 	Transmission = S0
-
-	'''
-	# --- Compute transmission per Voigt component using full propagation ---
-	X = np.array(X)
-	E_in_arr = np.array(E_in)
-	if E_in_arr.shape == (3,):
-		E_in_arr = np.array([
-			np.full(len(X), E_in_arr[0], dtype=complex),
-			np.full(len(X), E_in_arr[1], dtype=complex),
-			np.full(len(X), E_in_arr[2], dtype=complex),
-		])
-
-	I_in = (E_in_arr * E_in_arr.conjugate()).sum(axis=0)
-	voigt_transmissions = {}
-
-	for key, (Chi_plus_v, Chi_minus_v, Chi_z_v) in voigt_components.items():
-		# Compute field and transmission for each Voigt line using the same pipeline
-		Chi_v = [Chi_plus_v, Chi_minus_v, Chi_z_v]
-		E_out_v, _ = get_Efield(X, E_in_arr, Chi_v, p_dict)
-
-		S0_v = (E_out_v * E_out_v.conjugate()).sum(axis=0) / I_in
-		voigt_transmissions[key] = S0_v.real
-
-	'''
-
+	
+	
 	## Some quantities from Faraday geometry don't make sense when B and k not aligned, but leave them here for historical reasons
 	TransLeft = exp(-2.0*nPlus.imag*wavenumber*lcell)
 	TransRight = exp(-2.0*nMinus.imag*wavenumber*lcell)
@@ -1236,16 +903,16 @@ def get_spectra(X, E_in, p_dict, outputs=None):
 	#Stokes parameters
 
 	#S1#
-	Ex = np.array(rot.HorizPol_xy * E_out[:2])
+	Ex = np.array(JM.HorizPol_xy * E_out[:2])
 	Ix =  (Ex * Ex.conjugate()).sum(axis=0) / I_in
-	Ey =  np.array(rot.VertPol_xy * E_out[:2])
+	Ey =  np.array(JM.VertPol_xy * E_out[:2])
 	Iy =  (Ey * Ey.conjugate()).sum(axis=0) / I_in
 	
 	S1 = Ix - Iy
 	
 	#S2#
-	E_P45 =  np.array(rot.LPol_P45_xy * E_out[:2])
-	E_M45 =  np.array(rot.LPol_M45_xy * E_out[:2])
+	E_P45 =  np.array(JM.LPol_P45_xy * E_out[:2])
+	E_M45 =  np.array(JM.LPol_M45_xy * E_out[:2])
 	I_P45 = (E_P45 * E_P45.conjugate()).sum(axis=0) / I_in
 	I_M45 = (E_M45 * E_M45.conjugate()).sum(axis=0) / I_in
 	
@@ -1253,9 +920,9 @@ def get_spectra(X, E_in, p_dict, outputs=None):
 	
 	#S3#
 	# change to circular basis
-	E_out_lrz = cb.xyz_to_lrz(E_out)
-	El =  np.array(rot.CPol_L_lr * E_out_lrz[:2])
-	Er =  np.array(rot.CPol_R_lr * E_out_lrz[:2])
+	E_out_lrz = BC.xyz_to_lrz(E_out)
+	El =  np.array(JM.CPol_L_lr * E_out_lrz[:2])
+	Er =  np.array(JM.CPol_R_lr * E_out_lrz[:2])
 	Il = (El * El.conjugate()).sum(axis=0) / I_in
 	Ir = (Er * Er.conjugate()).sum(axis=0) / I_in
 	
@@ -1289,12 +956,7 @@ def get_spectra(X, E_in, p_dict, outputs=None):
 				'E_out':E_out, 
 				'Chi':Chi, 'ChiPlus':ChiPlus, 'ChiMinus':ChiMinus, 'ChiZ':ChiZ
 			}
-	'''
-	# --- add per-Voigt data ---
-	op['voigt_components'] = voigt_components  # from calc_chi()
-	if 'voigt_transmissions' in locals():
-		op['voigt_transmissions'] = voigt_transmissions
-	'''
+	
 	if (outputs == None) or ('All' in outputs):
 		# Default - return 'all' outputs (as used by GUI)
 		return S0.real,S1.real,S2.real,S3.real,Ix.real,Iy.real,I_P45.real,I_M45.real,alphaPlus,alphaMinus,alphaZ
@@ -1331,64 +993,3 @@ def output_list():
 	GIPlus				Group index of right-circularly polarised light \n\
 	"	
 	print(tstr)
-
-def main():
-	""" General test method """
-	
-	p_dict = {'Bfield':700,'rb85frac':1,'Btheta':88*np.pi/180,'Bphi':0*np.pi/180,'lcell':75e-3,'T':84,'Dline':'D2','Elem':'Cs'}
-	chiL,chiR,chiZ = calc_chi(np.linspace(-3500,3500,10),p_dict)
-	
-	#print 'ez: ',chiZ + 1 # ez / e0
-	#print 'ex: ',0.5*(2+chiL+chiR) # ex / e0
-	#print 'exy: ',0.5j*(chiR-chiL) # exy / e0
-	
-	RotMat, n1, n2 = solvd.solve_diel(chiL,chiR,chiZ,88*np.pi/180)
-	print((RotMat.shape))
-
-def calculation_time_analysis():
-	""" Test method for looking at timing performance """
-
-	p_dict = {'Bfield':700,'rb85frac':1,'Btheta':88*np.pi/180,'Bphi':0*np.pi/180,'lcell':75e-3,'T':84,'Dline':'D2','Elem':'Cs'}
-	chiL,chiR,chiZ = calc_chi([-3500],p_dict)
-	
-	for angle in [0, np.pi/32, np.pi/16, np.pi/8, np.pi/4, np.pi/2]:
-		print(('Angle (degrees): ',angle*180/np.pi))
-		RotMat, n1, n2 = solvd.solve_diel(chiL,chiR,chiZ,angle)
-		
-def test_equivalence():
-	""" Test numeric vs analytic solutions """
-	
-	
-	#analytic
-	p_dict = {'Bfield':15000,'rb85frac':1,'Btheta':0*np.pi/180,'Bphi':0*np.pi/180,'lcell':1e-3,'T':84,'Dline':'D2','Elem':'Rb'}
-	chiL1,chiR1,chiZ1 = calc_chi([-18400],p_dict)
-	RotMat1, n11, n21 = solvd.solve_diel(chiL1,chiR1,chiZ1,0,150,force_numeric=False)
-	
-	#numeric
-	chiL2, chiR2, chiZ2 = chiL1, chiR1, chiZ1
-	#chiL2,chiR2,chiZ2 = sp.calc_chi([-18400],p_dict)
-	RotMat2, n12, n22 = solvd.solve_diel(chiL2,chiR2,chiZ2,0,150,force_numeric=True)
-	
-	print('RM 1')
-	print(RotMat1)
-
-	print('RM 2')
-	print(RotMat2)	
-	
-	print('n1_1 (analytic)')
-	print(n11)
-	print('n1_2')
-	print(n12)
-	print('n2_1 (analytic)')
-	print(n21)
-	print('n2_2')
-	print(n22)
-	
-	print('chi1')
-	print((chiL1, chiR1, chiZ1))
-
-	print('chi2')
-	print((chiL2, chiR2, chiZ2))
-	
-#if __name__ == '__main__':
-#	test_equivalence()

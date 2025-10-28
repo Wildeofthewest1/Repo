@@ -18,52 +18,56 @@ def CalcNumberDensity(T,atom):
 	
 	
 	if atom in ['Rb85','Rb87','Rb']:
-		return numDenRb(T)
+		a = numDenRb(T)
 	elif atom=='Cs':
-		return numDenCs(T)
+		a = numDenCs(T)
 	elif atom in ['K','K39','K40','K41']:
-		return numDenK(T)
+		a = numDenK(T)
 	elif atom=='Na':
-		return numDenNa(T)
+		a = numDenNa(T)
 	elif atom in ['Ag107','Ag109','Ag']:
-		return numDenAg(T)
+		a = numDenAg(T)
+	
+	print(a)
+	return a
 
 def numDenRb(T):
-    #Calculates the rubidium number density
-    if T<312.46:
-        p=10.0**(4.857-4215./T)
-    else:
-        p=10.0**(8.316-4275./T-1.3102*log10(T))
-    NumberDensity=101325.0*p/(kB*T)
-    return NumberDensity
+	#Calculates the rubidium number density
+	if T<312.46:
+		p=10.0**(4.857-4215./T)
+	else:
+		p=10.0**(8.316-4275./T-1.3102*log10(T))
+	NumberDensity=101325.0*p/(kB*T)
+	print(NumberDensity)
+	return NumberDensity
 
 def numDenK(T):
-    '''Potassium number density'''
-    if T<336.8:
-        p=10.0**(4.961-4646.0/T)
-    else:
-        p=10.0**(8.233-4693.0/T-1.2403*log10(T))
-    NumberDensity=101325.0*p/(kB*T)
-    return NumberDensity
+	'''Potassium number density'''
+	if T<336.8:
+		p=10.0**(4.961-4646.0/T)
+	else:
+		p=10.0**(8.233-4693.0/T-1.2403*log10(T))
+	NumberDensity=101325.0*p/(kB*T)
+	return NumberDensity
 
 def numDenCs(T):
-    '''Caesium number density'''
-    if T<301.65:
-        p=10.0**(4.711-3999./T)
-    else:
-        p=10.0**(8.232-4062./T-1.3359*log10(T))
-    NumberDensity=101325.0*p/(kB*T)
-    return NumberDensity
+	'''Caesium number density'''
+	if T<301.65:
+		p=10.0**(4.711-3999./T)
+	else:
+		p=10.0**(8.232-4062./T-1.3359*log10(T))
+	NumberDensity=101325.0*p/(kB*T)
+	return NumberDensity
 
 def numDenNa(T):
-    '''Sodium number density'''
-    if T<370.95:
-        p=10.0**(5.298-5603./T)
-    else:
-        p=10.0**(8.400-5634./T-1.1748*log10(T))
-    NumberDensity=101325.0*p/(kB*T)
-    return NumberDensity
+	'''Sodium number density'''
+	if T<370.95:
+		p=10.0**(5.298-5603./T)
+	else:
+		p=10.0**(8.400-5634./T-1.1748*log10(T))
+	NumberDensity=101325.0*p/(kB*T)
+	return NumberDensity
 
 def numDenAg(T):
-    NumberDensity=1e16
-    return NumberDensity
+	NumberDensity=1e16
+	return NumberDensity
