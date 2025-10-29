@@ -24,6 +24,7 @@ Temp = 20
 
 ################################################################
 
+#print(3e8/780.2413272e-9)
 
 # Rubidium D2 Transmission Spectrum (showing individual Voigt dips)
 
@@ -57,7 +58,7 @@ Gamma_nat = natural_linewidth   # natural linewidth [rad/s]
 
 mass_Ag = 107.8682 * amu #Standard atomic weight for silver from NIST
 
-abundance107 = 0.51839 #NIST Ag107 abundace
+abundance107 = 1#0.51839 #NIST Ag107 abundace
 
 ratio1 = natural_linewidth / Rb_nat
 

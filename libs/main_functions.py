@@ -1,10 +1,5 @@
 import numpy as np
-from numpy import zeros,sqrt,pi,dot,exp,array,amax,arange,concatenate,argmin, matmul
-import matplotlib.pyplot as plt
-
-from scipy.special import wofz
-from scipy.interpolate import interp1d
-
+from numpy import pi,exp,array,amax,concatenate, matmul
 from scipy.constants import physical_constants, epsilon_0, hbar, c, h
 
 S=0.5 #Electron spin
@@ -35,182 +30,100 @@ p_dict_defaults = {	'Elem':'Rb', 'Dline':'D2',
 							'Rb85frac':72.17, 'K40frac':0.01, 'K41frac':6.73,'Ag107frac':51.839,
 							'BoltzmannFactor':True, 'AgNumden': 3e15, 'Isotope_Combination': 0}
 
-def FreqStren(groundLevels, excitedLevels, groundDim,
-			  excitedDim, Dline, hand,
-			  BoltzmannFactor=True, T=293.16,
-			  group_F=False, ground_F_lookup=None, excited_F_lookup=None):
+def FreqStren(groundLevels, excitedLevels, groundDim, excitedDim,
+              Dline, hand, BoltzmannFactor=True, T=293.16, tol_MHz=1.0):
+    """ 
+    Calculate transition frequencies and strengths by taking dot
+    products of relevant parts of the ground / excited state eigenvectors.
+    Then sum transitions whose ΔE differ by less than `tol_MHz`.
+    """
 
-	""" 
-	Calculate transition frequencies and strengths by taking dot
-	products of relevant parts of the ground / excited state eigenvectors 
-	"""
-	
-	transitionFrequency = zeros(groundDim*2*groundDim) #Initialise lists
-	transitionStrength = zeros(groundDim*2*groundDim)
-	transNo = 0
-	
-	groundLevelsT = []
-	excitedLevelsT = []
-	transitionFrequencyT = []
+    transitionFrequency = []
+    transitionStrength = []
 
-	## Boltzmann factor: -- only really needed when energy splitting of ground state is large
-	if BoltzmannFactor:
-		groundEnergies = array(groundLevels)[:,0].real
-		lowestEnergy = groundLevels[0][argmin(groundLevels,axis=0)[0]].real
-		BoltzDist = exp(-(groundEnergies-lowestEnergy)*h*1.e6/(kB*T)) #Not normalised
-		#print BoltzDist
-		BoltzDist = BoltzDist/BoltzDist.sum() # Normalised
+    ## Boltzmann factor
+    if BoltzmannFactor:
+        groundEnergies = np.array(groundLevels)[:, 0].real
+        lowestEnergy = np.min(groundEnergies)
+        BoltzDist = np.exp(-(groundEnergies - lowestEnergy) * h * 1e6 / (kB * T))
+        BoltzDist /= BoltzDist.sum()
+    else:
+        BoltzDist = np.ones(groundDim) / groundDim
 
-	# select correct columns of matrix corresponding to delta mL = -1, 0, +1
-	if hand=='Right':
-		bottom = 1
-		top = groundDim + 1
-	elif hand=='Z':
-		bottom = groundDim + 1
-		top = 2*groundDim + 1
-	elif hand=='Left':
-		bottom = 2*groundDim+1
-		top = excitedDim+1
+    # Select correct columns (polarisation)
+    if hand == 'Right':
+        bottom, top = 1, groundDim + 1
+    elif hand == 'Z':
+        bottom, top = groundDim + 1, 2 * groundDim + 1
+    elif hand == 'Left':
+        bottom, top = 2 * groundDim + 1, excitedDim + 1
+    else:
+        raise ValueError(f"Unknown hand type '{hand}'")
 
-	# select correct rows of matrix corresponding to D1 / D2 lines
-	if Dline=='D1':
-		interatorList = list(range(groundDim))
-	elif Dline=='D2':
-		interatorList = list(range(groundDim,excitedDim))\
-	
-	Fg_all, Fe_all = [], []
+    # Select correct excited-state rows
+    if Dline == 'D1':
+        iteratorList = range(groundDim)
+    elif Dline == 'D2':
+        iteratorList = range(groundDim, excitedDim)
+    else:
+        raise ValueError(f"Unknown D-line '{Dline}'")
 
+    # --- Compute all allowed transitions ---
+    transNo = 0
+    for gg in range(groundDim):
+        for ee in iteratorList:
+            cleb = np.dot(groundLevels[gg][1:], excitedLevels[ee][bottom:top]).real
+            cleb2 = cleb * cleb
+            if cleb2 > 0.0005:  # threshold
+                dE = (-groundLevels[gg][0].real + excitedLevels[ee][0].real)
+                s = (1.0 / 3.0) * cleb2 * BoltzDist[gg]
 
-	# find difference in energies and do dot product between (all) ground states
-	# 	and selected parts of excited state matrix
-	for gg in range(groundDim):
-		for ee in interatorList:
-			cleb = dot(groundLevels[gg][1:],excitedLevels[ee][bottom:top]).real
-			cleb2 = cleb*cleb
-			if cleb2 > 0.0005: #If negligible don't calculate.
-				if group_F and (ground_F_lookup is not None) and (excited_F_lookup is not None):
-					Fg_all.append(ground_F_lookup[gg])
-					Fe_all.append(excited_F_lookup[ee])
-				transitionFrequency[transNo] = int((-groundLevels[gg][0].real
-											  +excitedLevels[ee][0].real))
-				# We choose to perform the ground manifold reduction (see
-				# equation (4) in manual) here for convenience.
-				transitionFrequencyT.append(transitionFrequency[transNo])
-				groundLevelsT.append(groundLevels[gg][0].real)
-				excitedLevelsT.append(excitedLevels[ee][0].real)
-				
-				## Boltzmann factor:
-				if BoltzmannFactor: 
-					transitionStrength[transNo] = 1./3 * cleb2 * BoltzDist[gg]
-				else:
-					transitionStrength[transNo] = 1./3 * cleb2 * 1./groundDim
-				
-				print(f"  Transition {transNo}: ground={gg}, excited={ee}, "
-		  		f"ΔE={transitionFrequency[transNo]:.2f} MHz, strength={transitionStrength[transNo]:.3e}")
+                transitionFrequency.append(dE)
+                transitionStrength.append(s)
 
-				transNo += 1
+                print(f"  Transition {transNo}: ground={gg}, excited={ee}, "
+                      f"ΔE={dE:.2f} MHz, strength={s:.3e}")
+                transNo += 1
 
-	#print 'No transitions (ElecSus): ',transNo
-	print(f"[FreqStren] {Dline} {hand} → {transNo} hyperfine transitions found")
+    print(f"[FreqStren] {Dline} {hand} → {transNo} mF transitions found")
 
-	if not group_F:
-		return transitionFrequency, transitionStrength, transNo
+    # --- Group transitions with nearly equal ΔE (within tolerance) ---
+    tf = np.array(transitionFrequency)
+    ts = np.array(transitionStrength)
 
-	# --- Group by (Fg, Fe) ---
-	tf = np.array(transitionFrequency[:transNo], dtype=float)
-	ts = np.array(transitionStrength[:transNo], dtype=float)
-	Fg_all = np.array(Fg_all)
-	Fe_all = np.array(Fe_all)
+    # Sort by frequency
+    sort_idx = np.argsort(tf)
+    tf = tf[sort_idx]
+    ts = ts[sort_idx]
 
-	pairs = list(zip(Fg_all, Fe_all))
-	unique_pairs = sorted(set(pairs))
+    grouped_freqs = []
+    grouped_strengths = []
 
-	grouped_freqs = []
-	grouped_strengths = []
-	for (Fg, Fe) in unique_pairs:
-		m = (Fg_all == Fg) & (Fe_all == Fe)
-		s_sum = ts[m].sum()
-		f_avg = (tf[m] * ts[m]).sum() / s_sum
-		grouped_freqs.append(f_avg)
-		grouped_strengths.append(s_sum)
+    # Start first group
+    current_group_freq = tf[0]
+    current_group_strength = ts[0]
 
-	# Print summary
-	for (Fg, Fe), f, s in zip(unique_pairs, grouped_freqs, grouped_strengths):
-		print(f"  Fg={Fg:g} → Fe={Fe:g}, ΔE={f:.2f} MHz, strength={s:.3e}")
+    for i in range(1, len(tf)):
+        if abs(tf[i] - current_group_freq) <= tol_MHz:
+            # same group → sum strengths only
+            current_group_strength += ts[i]
+        else:
+            # store previous group, start new one
+            grouped_freqs.append(current_group_freq)
+            grouped_strengths.append(current_group_strength)
+            current_group_freq = tf[i]
+            current_group_strength = ts[i]
 
-	return np.array(grouped_freqs), np.array(grouped_strengths), len(unique_pairs)
+    # append last group
+    grouped_freqs.append(current_group_freq)
+    grouped_strengths.append(current_group_strength)
 
+    grouped_freqs = np.array(grouped_freqs)
+    grouped_strengths = np.array(grouped_strengths)
 
-	#return transitionFrequency, transitionStrength, transNo
+    print(f"[FreqStren] {Dline} {hand} → {len(grouped_freqs)} unique ΔE groups (tol={tol_MHz} MHz)")
 
-def add_voigt_old(d,DoppTemp,atomMass,wavenumber,gamma,voigtwidth,
-		ltransno,lenergy,lstrength,
-		rtransno,renergy,rstrength,
-		ztransno,zenergy,zstrength):
-	xpts = len(d)
-	npts = 2*voigtwidth+1
-	detune = 2.0*pi*1.0e6*(arange(npts)-voigtwidth) # Angular detuning (2pi Hz)
-	wavenumber =  wavenumber + detune/c # Allow the wavenumber to change (large detuning)
-	u = sqrt(2.0*kB*DoppTemp/atomMass)
-	ku = wavenumber*u
-	
-	# Fadeeva function:
-	a = gamma/ku
-	b = detune/ku
-	y = 1.0j*(0.5*sqrt(pi)/ku)*wofz(b+0.5j*a)
-	
-	ab = y.imag
-	disp = y.real
-	#interpolate lineshape functions
-	f_ab = interp1d(detune,ab)
-	f_disp = interp1d(detune,disp)
-	
-	'''
-	# Example: only compute the nth transition
-	n = 0  # or any valid index
-
-	lab = zeros(xpts)
-	ldisp = zeros(xpts)
-	if n < ltransno:
-		xc = lenergy[n]
-		lab += lstrength[n]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		ldisp += lstrength[n]*f_disp(2.0*pi*(d-xc)*1.0e6)
-
-	rab = zeros(xpts)
-	rdisp = zeros(xpts)
-	if n < rtransno:
-		xc = renergy[n]
-		rab += rstrength[n]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		rdisp += rstrength[n]*f_disp(2.0*pi*(d-xc)*1.0e6)
-
-	zab = zeros(xpts)
-	zdisp = zeros(xpts)
-	if n < ztransno:
-		xc = zenergy[n]
-		zab += zstrength[n]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		zdisp += zstrength[n]*f_disp(2.0*pi*(d-xc)*1.0e6)
-	'''
-
-	lab = zeros(xpts)
-	ldisp = zeros(xpts)
-	for line in range(ltransno+1):
-		xc = lenergy[line]
-		lab += lstrength[line]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		ldisp += lstrength[line]*f_disp(2.0*pi*(d-xc)*1.0e6)
-	rab = zeros(xpts)
-	rdisp = zeros(xpts)
-	for line in range(rtransno+1):
-		xc = renergy[line]
-		rab += rstrength[line]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		rdisp += rstrength[line]*f_disp(2.0*pi*(d-xc)*1.0e6)
-	zab = zeros(xpts)
-	zdisp = zeros(xpts)
-	for line in range(ztransno+1):
-		xc = zenergy[line]
-		zab += zstrength[line]*f_ab(2.0*pi*(d-xc)*1.0e6)
-		zdisp += zstrength[line]*f_disp(2.0*pi*(d-xc)*1.0e6)
-	
-	return lab, ldisp, rab, rdisp, zab, zdisp
+    return grouped_freqs, grouped_strengths, len(grouped_freqs)
 
 def add_voigt(d, DoppTemp, atomMass, wavenumber, gamma, voigtwidth,
 			  ltransno, lenergy, lstrength,
@@ -732,7 +645,6 @@ def calc_chi(X, p_dict,verbose=False):
 			ChiImLeft = prefactor*(Rb87frac*lab87)
 			ChiImRight = prefactor*(Rb87frac*rab87)
 			ChiImZ = prefactor*(Rb87frac*zab87)
-
 	elif Elem=='Cs':
 		lab, ldisp, rab, rdisp, zab, zdisp = 0,0,0,0,0,0
 		lab, ldisp, rab, rdisp, zab, zdisp = add_voigt(d,DoppTemp,CsAtom.mass,wavenumber,
@@ -740,12 +652,20 @@ def calc_chi(X, p_dict,verbose=False):
 										   ltransno,lenergy,lstrength,
 										   rtransno,renergy,rstrength,
 										   ztransno,zenergy,zstrength)
-		ChiRealLeft = prefactor*ldisp
-		ChiRealRight = prefactor*rdisp
-		ChiRealZ = prefactor*zdisp
-		ChiImLeft = prefactor*lab
-		ChiImRight = prefactor*rab
-		ChiImZ = prefactor*zab
+		if Isotope_Combination == 0:
+			ChiRealLeft = prefactor*ldisp[-1]
+			ChiRealRight = prefactor*rdisp[-1]
+			ChiRealZ = prefactor*zdisp[-1]
+			ChiImLeft = prefactor*lab[-1]
+			ChiImRight = prefactor*rab[-1]
+			ChiImZ = prefactor*zab[-1]
+		else:
+			ChiRealLeft = prefactor*ldisp
+			ChiRealRight = prefactor*rdisp
+			ChiRealZ = prefactor*zdisp
+			ChiImLeft = prefactor*lab
+			ChiImRight = prefactor*rab
+			ChiImZ = prefactor*zab
 	elif Elem=='Na':
 		lab, ldisp, rab, rdisp, zab, zdisp = 0,0,0,0,0,0
 		lab, ldisp, rab, rdisp, zab, zdisp = add_voigt(d,DoppTemp,NaAtom.mass,wavenumber,
@@ -753,12 +673,20 @@ def calc_chi(X, p_dict,verbose=False):
 										   ltransno,lenergy,lstrength,
 										   rtransno,renergy,rstrength,
 										   ztransno,zenergy,zstrength)
-		ChiRealLeft = prefactor*ldisp
-		ChiRealRight = prefactor*rdisp
-		ChiRealZ = prefactor*zdisp
-		ChiImLeft = prefactor*lab
-		ChiImRight = prefactor*rab
-		ChiImZ = prefactor*zab
+		if Isotope_Combination == 0:
+			ChiRealLeft = prefactor*ldisp[-1]
+			ChiRealRight = prefactor*rdisp[-1]
+			ChiRealZ = prefactor*zdisp[-1]
+			ChiImLeft = prefactor*lab[-1]
+			ChiImRight = prefactor*rab[-1]
+			ChiImZ = prefactor*zab[-1]
+		else:
+			ChiRealLeft = prefactor*ldisp
+			ChiRealRight = prefactor*rdisp
+			ChiRealZ = prefactor*zdisp
+			ChiImLeft = prefactor*lab
+			ChiImRight = prefactor*rab
+			ChiImZ = prefactor*zab
 	elif Elem=='K':
 		lab39, ldisp39, rab39, rdisp39, zab39, zdisp39 = 0,0,0,0,0,0
 		lab40, ldisp40, rab40, rdisp40, zab40, zdisp40 = 0,0,0,0,0,0
@@ -785,15 +713,34 @@ def calc_chi(X, p_dict,verbose=False):
 													   rtransno41,renergy41,rstrength41,
 													   ztransno41,zenergy41,zstrength41)
 
-		ChiRealLeft = prefactor*(K39frac*ldisp39+K40frac\
-									*ldisp40+K41frac*ldisp41)
-		ChiRealRight = prefactor*(K39frac*rdisp39+K40frac\
-									*rdisp40+K41frac*rdisp41)
-		ChiRealZ = prefactor*(K39frac*zdisp39+K40frac\
-									*zdisp40+K41frac*zdisp41)
-		ChiImLeft = prefactor*(K39frac*lab39+K40frac*lab40+K41frac*lab41)
-		ChiImRight = prefactor*(K39frac*rab39+K40frac*rab40+K41frac*rab41)
-		ChiImZ = prefactor*(K39frac*zab39+K40frac*zab40+K41frac*zab41)
+		if Isotope_Combination == 0:
+			ChiRealLeft = prefactor*(K39frac*ldisp39[-1]+K40frac*ldisp40[-1]+K41frac*ldisp41[-1])
+			ChiRealRight = prefactor*(K39frac*rdisp39[-1]+K40frac*rdisp40[-1]+K41frac*rdisp41[-1])
+			ChiRealZ = prefactor*(K39frac*zdisp39[-1]+K40frac*zdisp40[-1]+K41frac*zdisp41[-1])
+			ChiImLeft = prefactor*(K39frac*lab39[-1]+K40frac*lab40[-1]+K41frac*lab41[-1])
+			ChiImRight = prefactor*(K39frac*rab39[-1]+K40frac*rab40[-1]+K41frac*rab41[-1])
+			ChiImZ = prefactor*(K39frac*zab39[-1]+K40frac*zab40[-1]+K41frac*zab41[-1])
+		elif Isotope_Combination == 1:
+			ChiRealLeft = prefactor*(K39frac*ldisp39)
+			ChiRealRight = prefactor*(K39frac*rdisp39)
+			ChiRealZ = prefactor*(K39frac*zdisp39)
+			ChiImLeft = prefactor*(K39frac*lab39)
+			ChiImRight = prefactor*(K39frac*rab39)
+			ChiImZ = prefactor*(K39frac*zab39)
+		elif Isotope_Combination ==2:
+			ChiRealLeft = prefactor*(K40frac*ldisp40)
+			ChiRealRight = prefactor*(K40frac*rdisp40)
+			ChiRealZ = prefactor*(K40frac*zdisp40)
+			ChiImLeft = prefactor*(K40frac*lab40)
+			ChiImRight = prefactor*(K40frac*rab40)
+			ChiImZ = prefactor*(K40frac*zab40)
+		else:
+			ChiRealLeft = prefactor*(K41frac*ldisp41)
+			ChiRealRight = prefactor*(K41frac*rdisp41)
+			ChiRealZ = prefactor*(K41frac*zdisp41)
+			ChiImLeft = prefactor*(K41frac*lab41)
+			ChiImRight = prefactor*(K41frac*rab41)
+			ChiImZ = prefactor*(K41frac*zab41)
 	elif Elem == 'Ag':
 
 		# Initialise all Lorentzian/dispersion components
@@ -1011,225 +958,6 @@ def get_Efield(X, E_in, Chi, p_dict, verbose=False):
 	#return E_out.T[0], np.matrix(RM_ary.T[i])
 	return fast_E_out.T[0], np.matrix(RM_ary.T[-1])
 
-def get_spectra_old(X, E_in, p_dict, outputs=None):
-	""" 
-	Calls get_Efield() to get Electric field, then use Jones matrices 
-	to calculate experimentally useful quantities.
-	
-	Alias for the get_spectra2 method in libs.spectra.
-	
-	Inputs:
-		detuning_range [ numpy 1D array ] 
-			The independent variable and defines the detuning points over which to calculate. Values in MHz
-		
-		E_in [ numpy 1/2D array ] 
-			Defines the input electric field vector in the xyz basis. The z-axis is always the direction of propagation (independent of the magnetic field axis), and therefore the electric field should be a plane wave in the x,y plane. The array passed to this method should be in one of two formats:
-				(1) A 1D array of (Ex,Ey,Ez) which is the input electric field for all detuning values;
-				or
-				(2) A 2D array with dimensions (3,len(detuning_range)) - i.e. each detuning has a different electric field associated with it - which will happen on propagation through a birefringent/dichroic medium
-		
-		p_dict [ dictionary ]
-			Dictionary containing all parameters (the order of parameters is therefore not important)
-				Dictionary keys:
-	
-				Key				DataType	Unit		Description
-				---				---------	----		-----------
-				Elem	   			str			--			The chosen alkali element.
-				Dline	  			str			--			Specifies which D-line transition to calculate for (D1 or D2)
-				
-				# Experimental parameters
-				Bfield	 			float			Gauss	Magnitude of the applied magnetic field
-				T		 			float			Celsius	Temperature used to calculate atomic number density
-				GammaBuf   	float			MHz		Extra lorentzian broadening (usually from buffer gas 
-																but can be any extra homogeneous broadening)
-				shift	  			float			MHz		A global frequency shift of the atomic resonance frequencies
-				DoppTemp   	float			Celsius	Temperature linked to the Doppler width (used for
-																independent Doppler width and number density)
-				Constrain  		bool			--			If True, overides the DoppTemp value and sets it to T
-
-				# Elemental abundancies, where applicable
-				rb85frac   		float			%			percentage of rubidium-85 atoms
-				K40frac			float			%			percentage of potassium-40 atoms
-				K41frac			float			%			percentage of potassium-41 atoms
-				
-				lcell	  			float			m			length of the vapour cell
-				theta0	 		float			degrees	Linear polarisation angle w.r.t. to the x-axis
-				Pol				float			%			Percentage of probe beam that drives sigma minus (50% = linear polarisation)
-				
-				NOTE: If keys are missing from p_dict, default values contained in p_dict_defaults will be loaded.
-		
-		outputs: an iterable (list,tuple...) of strings that defines which spectra are returned, and in which order.
-			If not specified, defaults to None, in which case a default set of outputs is returned, which are:
-				S0, S1, S2, S3, Ix, Iy, I_P45, I_M45, alphaPlus, alphaMinus, alphaZ
-	
-	Returns:
-		A list of output arrays as defined by the 'outputs' keyword argument.
-		
-		
-	Example usage:
-		To calculate the room temperature absorption of a 75 mm long Cs reference cell in an applied magnetic field of 100 G aligned along the direction of propagation (Faraday geometry), between -10 and +10 GHz, with an input electric field aligned along the x-axis:
-		
-		detuning_range = np.linspace(-10,10,1000)*1e3 # GHz to MHz conversion
-		E_in = np.array([1,0,0])
-		p_dict = {'Elem':'Cs', 'Dline':'D2', 'Bfield':100, 'T':21, 'lcell':75e-3}
-		
-		[Transmission] = calculate(detuning_range,E_in,p_dict,outputs=['S0'])
-		
-		
-		More examples are available in the /tests/ folder
-	"""
-	# get some parameters from p dictionary
-	# need in try/except or equiv.
-	if 'Elem' in list(p_dict.keys()):
-		Elem = p_dict['Elem']
-	else:
-		Elem = p_dict_defaults['Elem']
-	if 'Dline' in list(p_dict.keys()):
-		Dline = p_dict['Dline']
-	else:
-		Dline = p_dict_defaults['Dline']
-	if 'shift' in list(p_dict.keys()):
-		shift = p_dict['shift']
-	else:
-		shift = p_dict_defaults['shift']
-	if 'lcell' in list(p_dict.keys()):
-		lcell = p_dict['lcell']
-	else:
-		lcell = p_dict_defaults['lcell']
-	if 'theta0' in list(p_dict.keys()):
-		theta0 = p_dict['theta0']
-	else:
-		theta0 = p_dict_defaults['theta0']
-	if 'Pol' in list(p_dict.keys()):
-		Pol = p_dict['Pol']
-	else:
-		Pol = p_dict_defaults['Pol']
-
-	# get wavenumber
-	transition = ac.transitions[Elem+Dline]
-
-	wavenumber = transition.wavevectorMagnitude
-	
-	# Calculate Susceptibility
-	#ChiPlus, ChiMinus, ChiZ, voigt_components = calc_chi(X, p_dict)
-	ChiPlus, ChiMinus, ChiZ = calc_chi(X, p_dict)
-
-	index = 0
-
-	Chi = [ChiPlus, ChiMinus, ChiZ]
-	
-	# Complex refractive index
-	nPlus = sqrt(1.0+ChiPlus)[index] #Complex refractive index driving sigma plus transitions
-	nMinus = sqrt(1.0+ChiMinus)[index] #Complex refractive index driving sigma minus transitions
-	nZ = sqrt(1.0+ChiZ)[index] # Complex index driving pi transitions
-
-	# convert (if necessary) detuning axis X to np array
-	if type(X) in (int, float, int):
-		X = np.array([X])
-	else:
-		X = np.array(X)
-
-	# Calculate E_field
-	E_out, R = get_Efield(X, E_in, [ChiPlus[index], ChiMinus[index], ChiZ[index]], p_dict)
-	#print 'Output E field (Z): \n', E_out[2]
-	
-
-	## Apply Jones matrices
-	
-	# Transmission - total intensity - just E_out**2 / E_in**2
-	E_in = np.array(E_in)
-	if E_in.shape == (3,):
-			E_in = np.array([np.ones(len(X))*E_in[0],np.ones(len(X))*E_in[1],np.ones(len(X))*E_in[2]])
-	
-	# normalised by input intensity
-	I_in = (E_in * E_in.conjugate()).sum(axis=0)
-	
-	S0 = ((E_out * E_out.conjugate()).sum(axis=0) / I_in)
-	
-	Iz = (E_out[2] * E_out[2].conjugate()).real / I_in
-	
-	Transmission = S0
-
-	## Some quantities from Faraday geometry don't make sense when B and k not aligned, but leave them here for historical reasons
-	TransLeft = exp(-2.0*nPlus.imag*wavenumber*lcell)
-	TransRight = exp(-2.0*nMinus.imag*wavenumber*lcell)
-	
-	# Faraday rotation angle (including incident linear polarisation angle)
-	phiPlus = wavenumber*nPlus.real*lcell
-	phiMinus = wavenumber*nMinus.real*lcell
-	phi = (phiMinus-phiPlus)/2.0 
-	##
-	
-	#Stokes parameters
-
-	#S1#
-	Ex = np.array(rot.HorizPol_xy * E_out[:2])
-	Ix =  (Ex * Ex.conjugate()).sum(axis=0) / I_in
-	Ey =  np.array(rot.VertPol_xy * E_out[:2])
-	Iy =  (Ey * Ey.conjugate()).sum(axis=0) / I_in
-	
-	S1 = Ix - Iy
-	
-	#S2#
-	E_P45 =  np.array(rot.LPol_P45_xy * E_out[:2])
-	E_M45 =  np.array(rot.LPol_M45_xy * E_out[:2])
-	I_P45 = (E_P45 * E_P45.conjugate()).sum(axis=0) / I_in
-	I_M45 = (E_M45 * E_M45.conjugate()).sum(axis=0) / I_in
-	
-	S2 = I_P45 - I_M45
-	
-	#S3#
-	# change to circular basis
-	E_out_lrz = cb.xyz_to_lrz(E_out)
-	El =  np.array(rot.CPol_L_lr * E_out_lrz[:2])
-	Er =  np.array(rot.CPol_R_lr * E_out_lrz[:2])
-	Il = (El * El.conjugate()).sum(axis=0) / I_in
-	Ir = (Er * Er.conjugate()).sum(axis=0) / I_in
-	
-	S3 = Ir - Il
-	
-	Ir = Ir.real
-	Il = Il.real
-	Ix = Ix.real
-	Iy = Iy.real
-
-	## (Real part) refractive indices
-	#nMinus = nPlus.real
-	#nPlus = nMinus.real
-
-	## Absorption coefficients - again not a physically relevant quantity anymore since propagation is not as simple as k * Im(Chi) * L in a non-Faraday geometry
-	alphaPlus = 2.0*nMinus.imag*wavenumber
-	alphaMinus = 2.0*nPlus.imag*wavenumber
-	alphaZ = 2.0*nZ.imag*wavenumber
-
-	# Refractive/Group indices for left/right/z also no longer make any sense
-	#d = (array(X)-shift) #Linear detuning
-	#dnWRTv = derivative(d,nMinus.real)
-	#GIPlus = nMinus.real + (X + transition.v0*1.0e-6)*dnWRTv
-	#dnWRTv = derivative(d,nPlus.real)
-	#GIMinus = nPlus.real + (X + transition.v0*1.0e-6)*dnWRTv
-		
-	# Valid outputs
-	op = {'S0':S0, 'S1':S1, 'S2':S2, 'S3':S3, 'Ix':Ix, 'Iy':Iy, 'Il':Il, 'Ir':Ir, 
-				'I_P45':I_P45, 'I_M45':I_M45, 
-				'alphaPlus':alphaPlus, 'alphaMinus':alphaMinus, 'alphaZ':alphaZ, 
-				'E_out':E_out, 
-				'Chi':Chi, 'ChiPlus':ChiPlus, 'ChiMinus':ChiMinus, 'ChiZ':ChiZ
-			}
-	'''
-	# --- add per-Voigt data ---
-	op['voigt_components'] = voigt_components  # from calc_chi()
-	if 'voigt_transmissions' in locals():
-		op['voigt_transmissions'] = voigt_transmissions
-	'''
-	if (outputs == None) or ('All' in outputs):
-		# Default - return 'all' outputs (as used by GUI)
-		return S0.real,S1.real,S2.real,S3.real,Ix.real,Iy.real,I_P45.real,I_M45.real,alphaPlus,alphaMinus,alphaZ
-	else:
-	# Return the variable names mentioned in the outputs list of strings
-		# the strings in outputs must exactly match the local variable names here!
-		return [op[output_str] for output_str in outputs]
-
 def get_spectra(X, E_in, p_dict, outputs=None):
 	""" 
 	Calls get_Efield() to get Electric field, then use Jones matrices 
@@ -1412,8 +1140,6 @@ def get_spectra(X, E_in, p_dict, outputs=None):
 		return S0_all, S1_all, S2_all, S3_all, Ix_all, Iy_all
 	else:
 		return [op[o] for o in outputs]
-
-
 
 def output_list():
 	""" Helper method that returns a list of all possible variables that get_spectra can return """
