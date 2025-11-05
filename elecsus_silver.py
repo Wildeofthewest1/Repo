@@ -3,6 +3,12 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from libs import main_functions as mf
 from matplotlib import rcParams
+
+import os
+os.chdir(r"C:\Users\Alienware\OneDrive - Durham University\Level_4_Project\Lvl_4\Repo")
+print("Now running in:", os.getcwd())
+
+
 fontsz = 16
 rcParams['font.family'] = 'serif' # e.g. 'sans-serif', 'monospace', etc.
 rcParams['font.serif'] = ['Times New Roman'] # specify a particular font
@@ -175,5 +181,12 @@ plt.xticks([-8, -4, 0, 4, 8])
 #plt.savefig(r"C:\Users\Matt\Desktop\Lvl_4\Project\voigt_Temp_High.pdf", dpi=600, bbox_inches='tight')
 
 #plt.legend()
+
+plt.show()
+
+img1 = mpimg.imread("Ag_Spec_Matt/425_0.bmp")
+plt.imshow(img1)
+
+#plt.savefig("425_0.png", dpi=300, bbox_inches='tight')
 
 plt.show()
