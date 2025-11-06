@@ -184,9 +184,13 @@ plt.xticks([-8, -4, 0, 4, 8])
 
 plt.show()
 
-img1 = mpimg.imread("Ag_Spec_Matt/425_0.bmp")
+name = "Ag_Spec_Matt/375_0.bmp"
+
+img1 = mpimg.imread(name)
 plt.imshow(img1)
 
-#plt.savefig("425_0.png", dpi=300, bbox_inches='tight')
+newname = name[13:-3]+"png"
+
+#plt.savefig(newname, dpi=300, bbox_inches='tight')
 
 plt.show()
