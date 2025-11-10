@@ -4,10 +4,9 @@ from scipy.ndimage import map_coordinates, center_of_mass
 import os
 
 # --- Configuration ---
-os.chdir(r"C:\Users\Matt\OneDrive - Durham University\Level_4_Project\Lvl_4\Repo")
+os.chdir(r"C:\\Users\\Matt\\OneDrive - Durham University\\Level_4_Project\\Lvl_4\\Repo")
 print("Now running in:", os.getcwd())
 
-# one dict per image: centre + exposure
 beam_images = {
     0:   {"centre": (717, 548), "exposure": None},
     50:  {"centre": (672, 536), "exposure": None},
@@ -15,138 +14,188 @@ beam_images = {
     175: {"centre": (743, 553), "exposure": None},
     225: {"centre": (729, 551), "exposure": None},
     325: {"centre": (699, 547), "exposure": None},
+    375: {"centre": (705, 552), "exposure": None},
     425: {"centre": (699, 519), "exposure": None},
 }
 
-default_exposure = 1e-9   # s
-allNormal = False         # keep False when exposure is meaningful
+default_exposure = 10e-9  # s
+allNormal = False
 base_path = "Ag_Spec_Matt/"
+integration_order = "r_first"#"theta_first"  # or "r_first"#
 
 def to3string(dist: int):
     return str(dist).zfill(3)
 
-def process_image(distance, centre=None, exposure=None, normalise=False):
+def process_image(distance, centre=None, exposure=None, normalise=False, integration_order="theta_first"):
+    """Process a single beam image and return all derived quantities."""
     path = f"{base_path}{to3string(distance)}_0.bmp"
-    print(f"\nProcessing: {path}")
-
     img = plt.imread(path)
     if img.ndim == 3:
         img = img.mean(axis=2)
+    ny, nx = img.shape
 
-    # image size is 1080 (y) × 1440 (x)
-    ny, nx = img.shape   # ny=1080, nx=1440
-
-    # exposure
+    # exposure handling
     if exposure is None:
         exposure = default_exposure
-        print(f"No exposure time specified — using default {exposure:.4f} s")
-    else:
-        print(f"Exposure time: {exposure:.4f} s")
-
-    # convert to something ∝ power
     img = img / exposure
-
     if normalise:
         img = img / img.max()
-        print(" -> Image normalised before integration")
 
-    # centre
+    # beam centre
     if centre is not None:
         cx, cy = centre
-        print(f"Using manual centre: (x={cx}, y={cy})")
     else:
         cy, cx = center_of_mass(img)
-        print(f"Detected centre of mass: (x={cx:.2f}, y={cy:.2f})")
 
-    # build Cartesian grid centred on beam
+    # coordinate grid
     x = np.arange(nx) - cx
     y = np.arange(ny) - cy
     X, Y = np.meshgrid(x, y)
-
-    # compute r_max as distance from centre to farthest corner
     corners = np.array([
         [0 - cx,     0 - cy],
         [nx-1 - cx,  0 - cy],
         [0 - cx,     ny-1 - cy],
         [nx-1 - cx,  ny-1 - cy],
     ])
-    r_max = np.sqrt((corners**2).sum(axis=1)).max()   # ≈ 900 for your case
+    r_max = np.sqrt((corners**2).sum(axis=1)).max()
 
-    # high-res polar grid
-    nr = int(np.ceil(r_max))          # ~1 pixel radial resolution
-    nt = int(np.ceil(2 * np.pi * r_max))   # ~1 pixel around outer ring
-    nt = min(nt, 6000)  # safety cap
-
+    # polar grid high-res
+    nr = int(np.ceil(r_max))
+    nt = int(np.ceil(2 * np.pi * r_max))
+    nt = min(nt, 6000)
     r = np.linspace(0, r_max, nr)
     theta = np.linspace(-np.pi, np.pi, nt)
-
-    r_grid, theta_grid = np.meshgrid(r, theta, indexing='ij')
+    r_grid, theta_grid = np.meshgrid(r, theta, indexing="ij")
     x_p = r_grid * np.cos(theta_grid) + cx
     y_p = r_grid * np.sin(theta_grid) + cy
-
-    # interpolate to polar
     polar_img = map_coordinates(img, [y_p, x_p], order=1)
 
-    # integrate over theta to get power vs radius
-    I_r_unnorm = np.trapezoid(polar_img, theta, axis=1)
+    # integration
+    if integration_order == "theta_first":
+        I_r_unnorm = np.trapezoid(polar_img, theta, axis=1)
+        P_total = np.trapezoid(I_r_unnorm * r, r)
+        profile_x = r
+        profile_y = I_r_unnorm / I_r_unnorm.max()
+        profile_label = "I(r)"
+        polar_extent = (theta.min(), theta.max(), r.min(), r.max())
+        polar_xlabel = "θ (radians)"
+        polar_ylabel = "r (pixels)"
+    else:
+        I_theta_unnorm = np.trapezoid(polar_img * r_grid, r, axis=0)
+        P_total = np.trapezoid(I_theta_unnorm, theta)
+        profile_x = theta
+        profile_y = I_theta_unnorm / I_theta_unnorm.max()
+        profile_label = "I(θ)"
+        polar_extent = (r.min(), r.max(), theta.min(), theta.max())
+        polar_xlabel = "r (pixels)"
+        polar_ylabel = "θ (radians)"
 
-    # total power (relative)
-    P_total = 2 * np.pi * np.trapezoid(I_r_unnorm * r, r)
+    return img, polar_img, profile_x, profile_y, P_total, (cx, cy), polar_extent, polar_xlabel, polar_ylabel, profile_label
 
-    # normalised profile for plotting
-    I_r = I_r_unnorm / I_r_unnorm.max()
-
-    # plots
-    fig, axs = plt.subplots(1, 3, figsize=(14, 4))
-    fig.suptitle(f"Distance = {distance} mm", fontsize=14)
-
-    axs[0].imshow(img, cmap='inferno', origin='lower')
-    axs[0].plot(cx, cy, 'bo', markersize=3, alpha=0.6,
-                label=('Manual centre' if centre else 'Detected centre'))
-    axs[0].legend()
-    axs[0].set_title("Original beam image")
-    axs[0].set_xlabel("x (pixels)")
-    axs[0].set_ylabel("y (pixels)")
-
-    axs[1].imshow(
-        polar_img,
-        extent=(theta.min(), theta.max(), r.min(), r.max()),
-        aspect='auto',
-        cmap='inferno',
-        origin='lower'
-    )
-    axs[1].set_title("Beam image in polar coordinates (dense)")
-    axs[1].set_xlabel("θ (radians)")
-    axs[1].set_ylabel("r (pixels)")
-
-    axs[2].plot(r, I_r)
-    axs[2].set_title("Radial power density profile")
-    axs[2].set_xlabel("r (pixels)")
-    axs[2].set_ylabel("Normalised power density (a.u.)")
-
-    plt.tight_layout()
-    plt.show()
-
-    return r, I_r, P_total, (cx, cy), exposure
-
-# run through all
+# --- Process all images ---
 results = {}
 for d, info in beam_images.items():
-    r, I_r, P, centre_used, exp_used = process_image(
+    img, polar_img, x_prof, y_prof, P, centre, polar_extent, polar_xlabel, polar_ylabel, profile_label = process_image(
         d,
         centre=info.get("centre"),
         exposure=info.get("exposure"),
-        normalise=allNormal
+        normalise=allNormal,
+        integration_order=integration_order,
     )
     results[d] = {
-        "r": r,
-        "I_r": I_r,
+        "img": img,
+        "polar_img": polar_img,
+        "x_prof": x_prof,
+        "y_prof": y_prof,
         "P_total": P,
-        "centre": centre_used,
-        "exposure": exp_used,
+        "centre": centre,
+        "polar_extent": polar_extent,
+        "polar_xlabel": polar_xlabel,
+        "polar_ylabel": polar_ylabel,
+        "profile_label": profile_label,
     }
 
+# --- Combined subplot grid ---
+n = len(results)
+fig, axs = plt.subplots(n, 3, figsize=(12, 3.2 * n))
+if n == 1:
+    axs = np.expand_dims(axs, 0)
 
+fig.suptitle(f"Beam analysis — integration: {integration_order.replace('_', ' ')}", fontsize=14)
+
+for i, (d, data) in enumerate(results.items()):
+    img = data["img"]
+    polar_img = data["polar_img"]
+    cx, cy = data["centre"]
+    x_prof, y_prof = data["x_prof"], data["y_prof"]
+    polar_extent = data["polar_extent"]
+    polar_xlabel = data["polar_xlabel"]
+    polar_ylabel = data["polar_ylabel"]
+    profile_label = data["profile_label"]
+
+    # --- Column 1: Original image ---
+    axs[i, 0].imshow(img, cmap="inferno", origin="lower")
+    axs[i, 0].plot(cx, cy, "bo", markersize=3, alpha=0.6)
+    axs[i, 0].set_ylabel("y (pixels)")
+    if i == 0:
+        axs[i, 0].set_title("Original")
+    if i < n - 1:
+        axs[i, 0].set_xlabel("")
+        axs[i, 0].set_xticklabels([])
+    else:
+        axs[i, 0].set_xlabel("x (pixels)")
+
+    # --- Column 2: Polar-transformed image ---
+    axs[i, 1].imshow(polar_img, extent=polar_extent, aspect="auto", cmap="inferno", origin="lower")
+    axs[i, 1].set_ylabel(polar_ylabel)
+    if i == 0:
+        axs[i, 1].set_title("Polar coordinates")
+    if i < n - 1:
+        axs[i, 1].set_xlabel("")
+        axs[i, 1].set_xticklabels([])
+    else:
+        axs[i, 1].set_xlabel(polar_xlabel)
+
+    # --- Column 3: Integrated profile ---
+    axs[i, 2].plot(x_prof, y_prof)
+    axs[i, 2].set_ylabel("Normalised intensity (a.u.)")
+    if i == 0:
+        axs[i, 2].set_title(f"{profile_label} profile")
+    if i < n - 1:
+        axs[i, 2].set_xlabel("")
+        axs[i, 2].set_xticklabels([])
+    else:
+        axs[i, 2].set_xlabel(profile_label.split("(")[1][:-1])
+
+    # Label each row on the left with its distance
+    axs[i, 0].text(-0.25, 0.5, f"{d} mm", transform=axs[i, 0].transAxes,
+                   rotation=90, va="center", ha="right", fontsize=10)
+
+# tighten spacing
+plt.subplots_adjust(hspace=0.05, wspace=0.25, top=0.94)
+plt.show()
+
+# --- Overlay of all profiles ---
+plt.figure(figsize=(8, 5))
+for d, data in results.items():
+    plt.plot(data["x_prof"], data["y_prof"], label=f"{d} mm")
+plt.xlabel(data["profile_label"].split("(")[1][:-1] + " (pixels or radians)")
+plt.ylabel("Normalised intensity (a.u.)")
+plt.title(f"All {data['profile_label']} profiles — {integration_order.replace('_', ' ')} integration")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+# --- Total power vs distance ---
+plt.figure(figsize=(6, 4))
+distances = list(beam_images.keys())
+powers = [results[d]["P_total"] for d in distances]
+plt.plot(distances, powers, "o-", color="tab:red")
+plt.xlabel("Distance (mm)")
+plt.ylabel("Relative total power (a.u.)")
+plt.title(f"Total integrated power vs distance\n(integration: {integration_order.replace('_', ' ')})")
+plt.tight_layout()
+plt.show()
 
 #name = "Ag_Spec_Matt/375_0.bmp"
 
