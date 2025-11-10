@@ -75,7 +75,7 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
     P_total = np.trapezoid(I_r_unnorm * r, r)
     profile_x = r
     profile_y = I_r_unnorm / I_r_unnorm.max()
-    profile_label = "I(r)"
+    profile_label = "P/r"
     polar_extent = (theta.min(), theta.max(), r.min(), r.max())
     polar_xlabel = "θ (radians)"
     polar_ylabel = "r (pixels)"
@@ -106,21 +106,7 @@ for d, info in beam_images.items():
 
 # --- Combined subplot grid ---
 n = len(results)
-import matplotlib.gridspec as gridspec
-fig = plt.figure(figsize=(12, 3.2 * n))
-# Create a custom GridSpec layout
-gs = gridspec.GridSpec(
-    nrows=n, ncols=3, figure=fig,
-    width_ratios=[1, 1, 1],   # same width for each column
-    wspace=0.25,               # small global horizontal space
-    hspace=0.15               # same vertical space as before
-)
-
-axs = np.empty((n, 3), dtype=object)
-for i in range(n):
-    axs[i, 0] = fig.add_subplot(gs[i, 0])   # left column
-    axs[i, 1] = fig.add_subplot(gs[i, 1])   # middle column
-    axs[i, 2] = fig.add_subplot(gs[i, 2])   # right column
+fig, axs = plt.subplots(n, 3, figsize=(12, 3.2 * n))
 
 if n == 1:
     axs = np.expand_dims(axs, 0)
@@ -169,21 +155,13 @@ for i, (d, data) in enumerate(results.items()):
         axs[i, 2].set_xlabel("")
         axs[i, 2].set_xticklabels([])
     else:
-        axs[i, 2].set_xlabel(profile_label.split("(")[1][:-1])
+        axs[i, 2].set_xlabel("P/r (W·px⁻¹)")
 
     # Label each row on the left with its distance
     axs[i, 0].text(-0.25, 0.5, f"{d} mm", transform=axs[i, 0].transAxes,
                    rotation=90, va="center", ha="right", fontsize=10)
 
-for i in range(n):
-    pos = axs[i, 0].get_position()
-    # move right edge closer to middle column by 2% of figure width
-    axs[i, 0].set_position([
-        pos.x0 + 0.06,  # shift right by 3% of total figure width
-        pos.y0,
-        pos.width,
-        pos.height
-    ])
+plt.subplots_adjust(hspace=0.1, wspace=0.25)
 
 #plt.savefig("integratedImages_Old", dpi=300, bbox_inches='tight')
 
@@ -195,7 +173,7 @@ plt.show()
 plt.figure(figsize=(8, 5))
 for d, data in results.items():
     plt.plot(data["x_prof"], data["y_prof"], label=f"{d} mm")
-plt.xlabel(data["profile_label"].split("(")[1][:-1] + " (pixels or radians)")
+plt.xlabel(data["profile_label"]+ "(pixels or radians)")
 plt.ylabel("Norm P/r (a.u.)")
 #plt.title(f"All {data['profile_label']} profiles — {integration_order.replace('_', ' ')} integration")
 plt.legend()
