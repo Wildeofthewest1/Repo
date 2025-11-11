@@ -6,7 +6,7 @@ import os
 # --- Configuration ---
 os.chdir(r"C:\\Users\\Alienware\\OneDrive - Durham University\\Level_4_Project\\Lvl_4\\Repo")
 print("Now running in:", os.getcwd())
-focus_distance = 200
+focus_distance = None
 
 beam_images = {
     0:   {"centre": (748, 532), "exposure": None},
@@ -18,17 +18,17 @@ beam_images = {
     150:  {"centre": (750, 522), "exposure": None},
     175:  {"centre": (748, 534), "exposure": None}, 
     200: {"centre": (748, 493), "exposure": None},
-    225:   {"centre": (717, 548), "exposure": None},
-    250:  {"centre": (672, 536), "exposure": None},
-    275:  {"centre": (672, 536), "exposure": None}, 
-    300: {"centre": (736, 544), "exposure": None},
-    325:   {"centre": (717, 548), "exposure": None},
-    350:  {"centre": (672, 536), "exposure": None},
-    375:  {"centre": (672, 536), "exposure": None}, 
-    400: {"centre": (736, 544), "exposure": None},
-    425: {"centre": (736, 544), "exposure": None},
-    450: {"centre": (736, 544), "exposure": None},
-    475: {"centre": (736, 544), "exposure": None},
+    225:   {"centre": (748, 459), "exposure": None},
+    250:  {"centre": (748, 517), "exposure": None},
+    275:  {"centre": (749, 546), "exposure": None}, 
+    300: {"centre": (751, 534), "exposure": None},
+    325:   {"centre": (753, 521), "exposure": None},
+    350:  {"centre": (756, 465), "exposure": None},
+    375:  {"centre": (761, 501), "exposure": None}, 
+    400: {"centre": (768, 477), "exposure": None},
+    425: {"centre": (778, 519), "exposure": None},
+    450: {"centre": (790, 585), "exposure": None},
+    475: {"centre": (805, 525), "exposure": None},
 }
 
 default_exposure = 12.097e-3  # s
