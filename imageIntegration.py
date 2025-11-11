@@ -6,17 +6,18 @@ import os
 # --- Configuration ---
 os.chdir(r"C:\\Users\\Alienware\\OneDrive - Durham University\\Level_4_Project\\Lvl_4\\Repo")
 print("Now running in:", os.getcwd())
+focus_distance = 200
 
 beam_images = {
-    0:   {"centre": (717, 548), "exposure": None},
-    25:   {"centre": (717, 548), "exposure": None},
-    50:  {"centre": (672, 536), "exposure": None},
-    75:  {"centre": (672, 536), "exposure": None},    
-    100: {"centre": (736, 544), "exposure": None},
-    125:   {"centre": (717, 548), "exposure": None},
-    150:  {"centre": (672, 536), "exposure": None},
-    175:  {"centre": (672, 536), "exposure": None}, 
-    200: {"centre": (736, 544), "exposure": None},
+    0:   {"centre": (748, 532), "exposure": None},
+    25:   {"centre": (747, 523), "exposure": None},
+    50:  {"centre": (751, 588), "exposure": None},
+    75:  {"centre": (751, 549), "exposure": None},    
+    100: {"centre": (751, 541), "exposure": None},
+    125:   {"centre": (750, 556), "exposure": None},
+    150:  {"centre": (750, 522), "exposure": None},
+    175:  {"centre": (748, 534), "exposure": None}, 
+    200: {"centre": (748, 493), "exposure": None},
     225:   {"centre": (717, 548), "exposure": None},
     250:  {"centre": (672, 536), "exposure": None},
     275:  {"centre": (672, 536), "exposure": None}, 
@@ -116,8 +117,15 @@ for d, info in beam_images.items():
         "profile_label": profile_label,
     }
 
-# --- Combined subplot grid ---
-n = len(results)
+# --- Decide what to plot ---
+if focus_distance is not None:
+    # Only plot the chosen distance
+    distances_to_plot = [focus_distance]
+else:
+    # Plot all
+    distances_to_plot = list(results.keys())
+
+n = len(distances_to_plot)
 fig, axs = plt.subplots(n, 3, figsize=(12, 3.2 * n))
 
 if n == 1:
@@ -125,7 +133,8 @@ if n == 1:
 
 #fig.suptitle(f"Beam analysis — integration: {integration_order.replace('_', ' ')}", fontsize=14)
 
-for i, (d, data) in enumerate(results.items()):
+for i, d in enumerate(distances_to_plot):
+    data = results[d]
     img = data["img"]
     polar_img = data["polar_img"]
     cx, cy = data["centre"]
@@ -180,30 +189,31 @@ plt.subplots_adjust(hspace=0.1, wspace=0.25)
 plt.show()
 
 
+# --- Conditional summary plots ---
+if focus_distance is None:
+    # --- Overlay of all profiles ---
+    plt.figure(figsize=(8, 5))
+    for d, data in results.items():
+        plt.plot(data["x_prof"], data["y_prof"], label=f"{d} mm")
+    plt.xlabel(data["profile_label"] + " (pixels)")
+    plt.ylabel("Norm P/r (a.u.)")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
-# --- Overlay of all profiles ---
-plt.figure(figsize=(8, 5))
-for d, data in results.items():
-    plt.plot(data["x_prof"], data["y_prof"], label=f"{d} mm")
-plt.xlabel(data["profile_label"]+ "(pixels or radians)")
-plt.ylabel("Norm P/r (a.u.)")
-#plt.title(f"All {data['profile_label']} profiles — {integration_order.replace('_', ' ')} integration")
-plt.legend()
-plt.tight_layout()
-#plt.savefig("all_integratedImages_Old", dpi=300, bbox_inches='tight')
-plt.show()
+    # --- Total power vs distance ---
+    plt.figure(figsize=(6, 4))
+    distances = list(beam_images.keys())
+    powers = [results[d]["P_total"] for d in distances]
+    plt.plot(distances, powers, "o-", color="tab:red")
+    plt.xlabel("Distance (mm)")
+    plt.ylabel("Relative total power (a.u.)")
+    plt.tight_layout()
+    plt.show()
 
-# --- Total power vs distance ---
-plt.figure(figsize=(6, 4))
-distances = list(beam_images.keys())
-powers = [results[d]["P_total"] for d in distances]
-plt.plot(distances, powers, "o-", color="tab:red")
-plt.xlabel("Distance (mm)")
-plt.ylabel("Relative total power (a.u.)")
-#plt.title(f"Total integrated power vs distance\n(integration: {integration_order.replace('_', ' ')})")
-plt.tight_layout()
-#plt.savefig("powers_Old", dpi=300, bbox_inches='tight')
-plt.show()
+else:
+    print(f"Displayed only {focus_distance} mm (single-image mode).")
+
 
 
 
