@@ -3,10 +3,21 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import map_coordinates, center_of_mass
 import os
 
+h = 6.62607015e-34  # Planck's constant (J·s)
+c = 2.99792458e8    # speed of light (m/s)
+wavelength = 328.16e-9 #wavelength of light
+
 # --- Configuration ---
 os.chdir(r"C:\\Users\\Alienware\\OneDrive - Durham University\\Level_4_Project\\Lvl_4\\Repo")
 print("Now running in:", os.getcwd())
 focus_distance = None
+
+pixel_size = 3.45e-6 #m
+pixel_area = pixel_size**2 #3.45 x 3.45 micrometers squared
+photon_energy = h * c / wavelength
+
+p_total = 1.2e-6 #W #(0.460-0.023)*1e-6
+print("TOTAL MEASURED POWER = " + str(p_total))
 
 beam_images = {
     0:   {"centre": (748, 532), "exposure": None},
@@ -32,7 +43,7 @@ beam_images = {
 }
 
 default_exposure = 12.097e-3  # s
-allNormal = True
+allNormal = False
 base_path = "Beam_Images_New/"
 
 def to3string(dist: int):
@@ -49,10 +60,9 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
     # exposure handling
     if exposure is None:
         exposure = default_exposure
-    img = img / exposure
+    img = img / (exposure * 255) #gives number of scaled counts per second from the image
     if normalise:
         img = img / img.max()
-
     # beam centre
     if centre is not None:
         cx, cy = centre
@@ -60,9 +70,9 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
         cy, cx = center_of_mass(img)
 
     # coordinate grid
-    x = np.arange(nx) - cx
-    y = np.arange(ny) - cy
-    X, Y = np.meshgrid(x, y)
+    #x = np.arange(nx) - cx
+    #y = np.arange(ny) - cy
+    #X, Y = np.meshgrid(x, y)
     corners = np.array([
         [0 - cx,     0 - cy],
         [nx-1 - cx,  0 - cy],
@@ -75,35 +85,38 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
     nr = int(np.ceil(r_max))
     nt = int(np.ceil(2 * np.pi * r_max))
     nt = min(nt, 6000)
-    r = np.linspace(0, r_max, nr)
-    theta = np.linspace(-np.pi, np.pi, nt)
+    r = np.linspace(0, r_max, nr) #convert r in pixels to r in m
+    theta = np.linspace(-np.pi, np.pi, nt) #theta in radians
     r_grid, theta_grid = np.meshgrid(r, theta, indexing="ij")
     x_p = r_grid * np.cos(theta_grid) + cx
     y_p = r_grid * np.sin(theta_grid) + cy
     polar_img = map_coordinates(img, [y_p, x_p], order=1)
 
     # integration
-
-    I_r_unnorm = np.trapezoid(polar_img, theta, axis=1)
-    P_total = np.trapezoid(I_r_unnorm * r, r)
-    profile_x = r
-    profile_y = I_r_unnorm / I_r_unnorm.max()
-    profile_label = "P/r"
+    P_r_unnorm = np.trapezoid(polar_img, theta, axis=1) #gives the power per unit radial length
+    P_total = np.trapezoid(P_r_unnorm * r, r) #Integrates over r to get the power, need to apply a scale factor so it equals the total measured power
+    scale_factor = p_total / P_total 
+    profile_x = r*pixel_size #radial size in m
+    profile_y = (P_r_unnorm * scale_factor) / pixel_area #summed intensity at each value of r
+    I_Peak = np.max(profile_y)
+    profile_label = "I(r)"
     polar_extent = (theta.min(), theta.max(), r.min(), r.max())
     polar_xlabel = "θ (radians)"
     polar_ylabel = "r (pixels)"
 
-    return img, polar_img, profile_x, profile_y, P_total, (cx, cy), polar_extent, polar_xlabel, polar_ylabel, profile_label
+    return img, polar_img, profile_x, profile_y, P_total, (cx, cy), polar_extent, polar_xlabel, polar_ylabel, profile_label, I_Peak
+
 
 # --- Process all images ---
 results = {}
 for d, info in beam_images.items():
-    img, polar_img, x_prof, y_prof, P, centre, polar_extent, polar_xlabel, polar_ylabel, profile_label = process_image(
+    img, polar_img, x_prof, y_prof, P, centre, polar_extent, polar_xlabel, polar_ylabel, profile_label, I_max = process_image(
         d,
         centre=info.get("centre"),
-        exposure=info.get("exposure"),
+        exposure = info.get("exposure") or default_exposure,
         normalise=allNormal,
     )
+
     results[d] = {
         "img": img,
         "polar_img": polar_img,
@@ -115,6 +128,7 @@ for d, info in beam_images.items():
         "polar_xlabel": polar_xlabel,
         "polar_ylabel": polar_ylabel,
         "profile_label": profile_label,
+        "I_max": I_max,
     }
 
 # --- Decide what to plot ---
@@ -143,6 +157,7 @@ for i, d in enumerate(distances_to_plot):
     polar_xlabel = data["polar_xlabel"]
     polar_ylabel = data["polar_ylabel"]
     profile_label = data["profile_label"]
+    I_max = data["I_max"]
 
     # --- Column 1: Original image ---
     axs[i, 0].imshow(img, cmap="inferno", origin="lower")
@@ -169,14 +184,15 @@ for i, d in enumerate(distances_to_plot):
 
     # --- Column 3: Integrated profile ---
     axs[i, 2].plot(x_prof, y_prof)
-    axs[i, 2].set_ylabel("Norm P/r")
+    axs[i, 2].set_ylabel(" Total I(r) ($W m^{-2}$)")
+    axs[i, 2].text(0,0,f"Peak intensity {I_max} ($W m^{-2}$)")
     if i == 0:
         axs[i, 2].set_title(f"{profile_label} profile")
     if i < n - 1:
         axs[i, 2].set_xlabel("")
         axs[i, 2].set_xticklabels([])
     else:
-        axs[i, 2].set_xlabel("P/r (W·px⁻¹)")
+        axs[i, 2].set_xlabel("r (m)")
 
     # Label each row on the left with its distance
     axs[i, 0].text(-0.25, 0.5, f"{d} mm", transform=axs[i, 0].transAxes,
@@ -195,19 +211,30 @@ if focus_distance is None:
     plt.figure(figsize=(8, 5))
     for d, data in results.items():
         plt.plot(data["x_prof"], data["y_prof"], label=f"{d} mm")
-    plt.xlabel(data["profile_label"] + " (pixels)")
-    plt.ylabel("Norm P/r (a.u.)")
+    plt.xlabel("r (m)")
+    plt.ylabel("I(r) ($W m^{-2}$)")
     plt.legend()
     plt.tight_layout()
     plt.show()
 
     # --- Total power vs distance ---
-    plt.figure(figsize=(6, 4))
-    distances = list(beam_images.keys())
-    powers = [results[d]["P_total"] for d in distances]
-    plt.plot(distances, powers, "o-", color="tab:red")
-    plt.xlabel("Distance (mm)")
-    plt.ylabel("Relative total power (a.u.)")
+    #plt.figure(figsize=(6, 4))
+    #distances = list(beam_images.keys())
+    #powers = [results[d]["P_total"] for d in distances]
+    #plt.plot(distances, powers, "o-", color="tab:red")
+    #plt.xlabel("Distance from aperature zero (mm)")
+    #plt.ylabel("Total integrated power (W)")
+    #plt.tight_layout()
+    #plt.show()
+
+    distances = list(results.keys())
+    I_max_values = [results[d]["I_max"] for d in distances]
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(distances, I_max_values, "o-", color="tab:red")
+    plt.xlabel("Distance from 0 point (mm)")
+    plt.ylabel(r"$I_\mathrm{max}$ (W m$^{-2}$)")
+    plt.title("Peak intensity vs distance")
     plt.tight_layout()
     plt.show()
 
