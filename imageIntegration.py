@@ -9,25 +9,37 @@ print("Now running in:", os.getcwd())
 
 beam_images = {
     0:   {"centre": (717, 548), "exposure": None},
+    25:   {"centre": (717, 548), "exposure": None},
     50:  {"centre": (672, 536), "exposure": None},
+    75:  {"centre": (672, 536), "exposure": None},    
     100: {"centre": (736, 544), "exposure": None},
-    175: {"centre": (743, 553), "exposure": None},
-    225: {"centre": (729, 551), "exposure": None},
-    325: {"centre": (699, 547), "exposure": None},
-    375: {"centre": (705, 552), "exposure": None},
-    425: {"centre": (699, 519), "exposure": None},
+    125:   {"centre": (717, 548), "exposure": None},
+    150:  {"centre": (672, 536), "exposure": None},
+    175:  {"centre": (672, 536), "exposure": None}, 
+    200: {"centre": (736, 544), "exposure": None},
+    225:   {"centre": (717, 548), "exposure": None},
+    250:  {"centre": (672, 536), "exposure": None},
+    275:  {"centre": (672, 536), "exposure": None}, 
+    300: {"centre": (736, 544), "exposure": None},
+    325:   {"centre": (717, 548), "exposure": None},
+    350:  {"centre": (672, 536), "exposure": None},
+    375:  {"centre": (672, 536), "exposure": None}, 
+    400: {"centre": (736, 544), "exposure": None},
+    425: {"centre": (736, 544), "exposure": None},
+    450: {"centre": (736, 544), "exposure": None},
+    475: {"centre": (736, 544), "exposure": None},
 }
 
-default_exposure = 1e-6  # s
+default_exposure = 12.097e-3  # s
 allNormal = True
-base_path = "Ag_Spec_Matt/"
+base_path = "Beam_Images_New/"
 
 def to3string(dist: int):
     return str(dist).zfill(3)
 
 def process_image(distance, centre=None, exposure=None, normalise=False):
     """Process a single beam image and return all derived quantities."""
-    path = f"{base_path}{to3string(distance)}_0.bmp"
+    path = f"{base_path}{to3string(distance)}_0_12_097ms.bmp"
     img = plt.imread(path)
     if img.ndim == 3:
         img = img.mean(axis=2)
