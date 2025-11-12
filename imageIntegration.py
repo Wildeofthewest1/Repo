@@ -2,24 +2,27 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import map_coordinates, center_of_mass
 import os
+from scipy.integrate import cumulative_trapezoid as cumtrapz
 
 h = 6.62607015e-34  # Planck's constant (J·s)
 c = 2.99792458e8    # speed of light (m/s)
-wavelength = 328.16e-9 #wavelength of light
+wavelength = 328.1625e-9 #wavelength of light
+gamma_nat = 1.4e8
+I_sat = (np.pi * h * c * gamma_nat)/(3 * wavelength**3)
 
 # --- Configuration ---
 os.chdir(r"C:\\Users\\Alienware\\OneDrive - Durham University\\Level_4_Project\\Lvl_4\\Repo")
 print("Now running in:", os.getcwd())
-focus_distance = None#475 # Only show a certain distance
+focus_distance = 475 # Only show a certain distance
 
-#save_all_plots = True
-save_all_plots = False
+save_all_plots = True
+#save_all_plots = False
 
 pixel_size = 3.45e-6 #m
 pixel_area = pixel_size**2 #3.45 x 3.45 micrometers squared
 photon_energy = h * c / wavelength
 
-p_total = 1.2e-6 #W #(0.460-0.023)*1e-6
+p_total = 1.205e-6 #W #(0.460-0.023)*1e-6
 print("TOTAL MEASURED POWER = " + str(p_total))
 
 beam_images = {
@@ -70,7 +73,12 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
 	# exposure handling
 	if exposure is None:
 		exposure = default_exposure
-	img = img / (exposure * 255) #gives number of scaled counts per second from the image
+	img = img / (exposure * 255) #gives unscaled intensity values to each pixel
+
+	sf = 1
+
+	#print(np.sum(img))
+
 	if normalise:
 		img = img / img.max()
 	# beam centre
@@ -80,9 +88,6 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
 		cy, cx = center_of_mass(img)
 
 	# coordinate grid
-	#x = np.arange(nx) - cx
-	#y = np.arange(ny) - cy
-	#X, Y = np.meshgrid(x, y)
 	corners = np.array([
 		[0 - cx,     0 - cy],
 		[nx-1 - cx,  0 - cy],
@@ -95,7 +100,8 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
 	nr = int(np.ceil(r_max))
 	nt = int(np.ceil(2 * np.pi * r_max))
 	nt = min(nt, 6000)
-	r = np.linspace(0, r_max, nr) #convert r in pixels to r in m
+	r = np.linspace(0, r_max, nr) #convert pixel lengths to real lengths in m
+	r_m = r * pixel_size
 	theta = np.linspace(-np.pi, np.pi, nt) #theta in radians
 	r_grid, theta_grid = np.meshgrid(r, theta, indexing="ij")
 	x_p = r_grid * np.cos(theta_grid) + cx
@@ -103,24 +109,35 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
 	polar_img = map_coordinates(img, [y_p, x_p], order=1)
 
 	# integration
-	P_r_unnorm = np.trapezoid(polar_img, theta, axis=1) #gives the power per unit radial length
-	P_total = np.trapezoid(P_r_unnorm * r, r) #Integrates over r to get the power, need to apply a scale factor so it equals the total measured power
-	scale_factor = p_total / P_total 
-	profile_x = r*pixel_size #radial size in m
-	profile_y = (P_r_unnorm * scale_factor) / pixel_area #summed intensity at each value of r
-	I_Peak = np.max(profile_y)
+	P_r_unnorm = np.trapezoid(polar_img, theta, axis=1)#gives the power per unit radial length
+	P_total = np.trapezoid(P_r_unnorm * r, r)#Integrates over r to get the power, need to apply a scale factor so it equals the total measured power
+	P_encircled = cumtrapz(P_r_unnorm * r, r, initial=0)
+	#print(distance, P_total)
+	scale_factor = p_total / (P_total)
+	#Total measured power is known
+
+	profile_x = r * pixel_size #radial size in m
+	profile_y = (P_r_unnorm * (scale_factor / pixel_area)) / (np.pi * 2) # average intensity per radius
+	r_safe = r
+	r_safe[0] = r_safe[1]
+	I_avg_area = P_encircled / (np.pi * r_safe**2)  # avoid divide-by-zero at r=0
+	I_avg_area[0] = 0
+	I_avg_area_scaled = I_avg_area * (scale_factor / pixel_area)
+
+	I_Peak = np.max(profile_y) #peak intensity of radial average intensity distribution
+	I_Ave_Peak = np.max(I_avg_area_scaled)
 	profile_label = "I(r)"
 	polar_extent = (theta.min(), theta.max(), r.min(), r.max())
 	polar_xlabel = "θ (radians)"
 	polar_ylabel = "r (pixels)"
 
-	return img, polar_img, profile_x, profile_y, P_total, (cx, cy), polar_extent, polar_xlabel, polar_ylabel, profile_label, I_Peak
+	return img, polar_img, profile_x, profile_y, P_total, (cx, cy), polar_extent, polar_xlabel, polar_ylabel, profile_label, I_Peak, I_avg_area_scaled, I_Ave_Peak
 
 
 # --- Process all images ---
 results = {}
 for d, info in beam_images.items():
-	img, polar_img, x_prof, y_prof, P, centre, polar_extent, polar_xlabel, polar_ylabel, profile_label, I_max = process_image(
+	img, polar_img, x_prof, y_prof, P, centre, polar_extent, polar_xlabel, polar_ylabel, profile_label, I_max, I_ave_profile, I_ave_peak = process_image(
 		d,
 		centre=info.get("centre"),
 		exposure = info.get("exposure") or default_exposure,
@@ -139,9 +156,11 @@ for d, info in beam_images.items():
 		"polar_ylabel": polar_ylabel,
 		"profile_label": profile_label,
 		"I_max": I_max,
+		"I_Ave_profile" : I_ave_profile,
+		"I_Ave_max": I_ave_peak,
 	}
 
-plot_main = False
+plot_main = not False
 if plot_main:
 	# --- Decide what to plot ---
 	if focus_distance is not None:
@@ -195,16 +214,26 @@ if plot_main:
 			axs[i, 1].set_xlabel(polar_xlabel)
 
 		# --- Column 3: Integrated profile ---
-		axs[i, 2].plot(x_prof, y_prof)
-		axs[i, 2].set_ylabel(" Total I(r) ($W m^{-2}$)")
-		I_round = round_sig(I_max,4)
+		axs[i, 2].plot(x_prof * 1e3, y_prof / I_sat, label=r"$I(r)$ / $I_{sat}$", zorder = 1)
+		axs[i, 2].plot(x_prof * 1e3, data["I_Ave_profile"] / I_sat, '--', label=r"$I_{avg}(r)$ / $I_{sat}$", zorder = 0)
+		axs[i, 2].legend(loc="upper right", fontsize=8)
 
-		axs[i, 2].text(0.98,0.98,
-			r"$I_{max} = $" + f"{I_round}" + " ($W~m^{-2}$)",
+		axs[i, 2].set_ylabel(r"$I$ / $I_{sat}$")
+		I_round = round_sig(I_max, 4)
+		I_round2 = round_sig(I_ave_peak, 4)
+
+		axs[i, 2].text(0.98,0.8,
+			r"Peak $I(r) = $" + f"{I_round}" + " ($W~m^{-2}$)",
 			ha='right', va='top',
 			transform=axs[i, 2].transAxes,
 			fontsize=10,)
 			#bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, boxstyle='round,pad=0.3'))
+
+		axs[i, 2].text(0.98,0.7,
+			r"Peak $I_{avg} = $" + f"{I_round2}" + " ($W~m^{-2}$)",
+			ha='right', va='top',
+			transform=axs[i, 2].transAxes,
+			fontsize=10,)
 
 		if i == 0:
 			axs[i, 2].set_title(f"{profile_label} profile")
@@ -212,7 +241,9 @@ if plot_main:
 			axs[i, 2].set_xlabel("")
 			axs[i, 2].set_xticklabels([])
 		else:
-			axs[i, 2].set_xlabel("r (m)")
+			axs[i, 2].set_xlabel("r (mm)")
+
+		axs[i, 2].ticklabel_format(style='sci', axis='y', scilimits=(-3, 3))
 
 		# Label each row on the left with its distance
 		axs[i, 0].text(-0.25, 0.5, f"{d} mm", transform=axs[i, 0].transAxes,
@@ -231,7 +262,6 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D plotting)
 if focus_distance is None:
 
 	# --- Create a heatmap of all I(r) profiles (radius vs distance) ---
-	import matplotlib.pyplot as plt
 
 	# Extract and align all I(r) profiles
 	distances = sorted(results.keys())
@@ -244,7 +274,7 @@ if focus_distance is None:
 	for d in distances:
 		x_prof = results[d]["x_prof"]
 		y_prof = results[d]["y_prof"]
-		I_interp = np.interp(r_common, x_prof, y_prof)
+		I_interp = np.interp(r_common, x_prof, y_prof)/I_sat
 		I_profiles.append(I_interp)
 
 	I_profiles = np.array(I_profiles)  # shape = (num_distances, num_r_points)
@@ -260,32 +290,77 @@ if focus_distance is None:
 		extent=extent,
 		aspect='auto',
 		origin='lower',
-		cmap='inferno'
+		cmap='inferno',
+		interpolation='bilinear'
 	)
-	plt.colorbar(label=r"Intensity $I(r)$ (W m$^{-2}$)")
+	plt.colorbar(label=r"$I(r)$ / $I_{sat}$")
 	plt.xlabel("Distance (mm)")
 	plt.ylabel("Radius (mm)")
 	plt.title("Radial Intensity Profiles Heatmap")
 	plt.tight_layout()
+
+	plt.ticklabel_format(style='sci', axis='both', scilimits=(-3, 3))
 
 	if save_all_plots:
 		plt.savefig("I_r_heatmap.png", dpi=300, bbox_inches='tight')
 
 	plt.show()
 
+	# --- Create a heatmap of all ⟨I⟩(r) profiles (encircled average intensity vs distance) ---
+
+	# Interpolate all ⟨I⟩(r) profiles to the same r grid
+	I_Ave_profiles = []
+
+	for d in distances:
+		x_prof = results[d]["x_prof"]
+		y_ave = results[d]["I_Ave_profile"]
+		I_Ave_interp = np.interp(r_common, x_prof, y_ave)/I_sat
+		I_Ave_profiles.append(I_Ave_interp)
+
+	I_Ave_profiles = np.array(I_Ave_profiles)  # shape = (num_distances, num_r_points)
+	I_Ave_profiles = I_Ave_profiles.T  # transpose so radius is on y-axis
+
+	# Create the heatmap
+	plt.figure(figsize=(10, 6))
+	extent = [distances[0], distances[-1], r_common[0]*1e3, r_common[-1]*1e3]  # x=distance (mm), y=radius (mm)
+	plt.imshow(
+		I_Ave_profiles,
+		extent=extent,
+		aspect='auto',
+		origin='lower',
+		cmap='inferno',
+		interpolation='bilinear'
+	)
+	plt.colorbar(label=r"$I_{avg}(r)$ / $I_{sat}$")
+	plt.xlabel("Distance (mm)")
+	plt.ylabel("Radius (mm)")
+	plt.title("Encircled-Average Intensity Profiles Heatmap")
+	plt.tight_layout()
+
+	plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 3))
+
+	if save_all_plots:
+		plt.savefig("I_Ave_r_heatmap.png", dpi=300, bbox_inches='tight')
+
+	plt.show()
+
 	distances = list(results.keys())
-	I_max_values = [results[d]["I_max"] for d in distances]
+	I_max_values = np.array([results[d]["I_max"] for d in distances]) / I_sat
+	I_Ave_max_values = np.array([results[d]["I_Ave_max"] for d in distances]) / I_sat
 
 	plt.figure(figsize=(8, 5))
-	plt.plot(distances, I_max_values, "o-", color="tab:red")
+	plt.plot(distances, I_max_values, "o-", color="tab:red", zorder = 1, label = r"Peak $I(r)$")
+	plt.plot(distances, I_Ave_max_values , "x-", color="tab:orange", zorder = 0, label = r"Peak $I_{avg}$")
 	plt.xlabel("Distance from 0 point (mm)")
-	plt.ylabel(r"$I_\mathrm{max}$ (W m$^{-2}$)")
+	plt.ylabel(r"$I_{max}$ / $I_{sat}$")
 	plt.title("Peak intensity vs distance")
 	plt.tight_layout()
+	plt.legend(loc="lower right")
+
+	plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 3))
 
 	if save_all_plots:
 		plt.savefig("I_max_distance_graph", dpi=300, bbox_inches='tight')
-
 	plt.show()
 
 else:
