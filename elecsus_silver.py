@@ -19,8 +19,8 @@ Detuning=np.linspace(-10,10,2000)*1e3 #Detuning range between -10 and 10 GHz. Ne
 E_in=np.array([1,0,0]) #Horizontal Linear Light input. We define E_in = [Ex,Ey,Ez]
 
 choice = 1 #0 = Rb, 1 = Ag, 2 = K, 3 = Na, 4 = Cs
-Temp = 5000
-AgNumberDensity = 4e15
+Temp = 25
+AgNumberDensity = 1e16
 Dline = 'D2'
 lcell = 75e-3
 Bfield = 0
@@ -178,19 +178,19 @@ plt.xlim([-8.5,8.5])
 plt.yticks([0.00, 0.25, 0.50, 0.75, 1.00])
 plt.xticks([-8, -4, 0, 4, 8])
 
-#plt.savefig(r"C:\Users\Matt\Desktop\Lvl_4\Project\voigt_Temp_High.pdf", dpi=600, bbox_inches='tight')
+#plt.savefig(r"C:\Users\Alienware\OneDrive - Durham University\Level_4_Project\Lvl_4\Project\voight_full.pdf", dpi=600, bbox_inches='tight')
 
 #plt.legend()
 
 plt.show()
 
-name = "Ag_Spec_Matt/375_0.bmp"
+#name = "Ag_Spec_Matt/375_0.bmp"
 
-img1 = mpimg.imread(name)
-plt.imshow(img1)
+#img1 = mpimg.imread(name)
+#plt.imshow(img1)
 
-newname = name[13:-3]+"png"
+#newname = name[13:-3]+"png"
 
 #plt.savefig(newname, dpi=300, bbox_inches='tight')
 
-plt.show()
+#plt.show()

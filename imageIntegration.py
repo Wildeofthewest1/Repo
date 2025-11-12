@@ -3,17 +3,26 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import map_coordinates, center_of_mass
 import os
 from scipy.integrate import cumulative_trapezoid as cumtrapz
+from matplotlib import rcParams
 
 h = 6.62607015e-34  # Planck's constant (J·s)
 c = 2.99792458e8    # speed of light (m/s)
-wavelength = 328.1625e-9 #wavelength of light
+wavelength = 328.1629601e-9 #wavelength of light
 gamma_nat = 1.4e8
 I_sat = (np.pi * h * c * gamma_nat)/(3 * wavelength**3)
 
 # --- Configuration ---
 os.chdir(r"C:\\Users\\Alienware\\OneDrive - Durham University\\Level_4_Project\\Lvl_4\\Repo")
 print("Now running in:", os.getcwd())
-focus_distance = 475 # Only show a certain distance
+
+fontsz = 16
+rcParams['font.family'] = 'serif' # e.g. 'sans-serif', 'monospace', etc.
+rcParams['font.serif'] = ['Times New Roman'] # specify a particular font
+rcParams['font.size'] = fontsz
+rcParams['mathtext.fontset'] = 'dejavuserif' # or 'cm', 'stix', 'custom'
+
+
+focus_distance = None # Only show a certain distance
 
 save_all_plots = True
 #save_all_plots = False
@@ -189,6 +198,7 @@ if plot_main:
 		polar_ylabel = data["polar_ylabel"]
 		profile_label = data["profile_label"]
 		I_max = data["I_max"]
+		I_ave_peak = data["I_Ave_max"]
 
 		# --- Column 1: Original image ---
 		axs[i, 0].imshow(img, cmap="inferno", origin="lower")
@@ -293,7 +303,10 @@ if focus_distance is None:
 		cmap='inferno',
 		interpolation='bilinear'
 	)
-	plt.colorbar(label=r"$I(r)$ / $I_{sat}$")
+	cbar = plt.colorbar(label=r"$I(r)$ / $I_{sat}$")
+	cbar.formatter.set_powerlimits((-3, 3))
+	cbar.formatter.set_useMathText(True)
+	cbar.update_ticks()
 	plt.xlabel("Distance (mm)")
 	plt.ylabel("Radius (mm)")
 	plt.title("Radial Intensity Profiles Heatmap")
@@ -331,7 +344,10 @@ if focus_distance is None:
 		cmap='inferno',
 		interpolation='bilinear'
 	)
-	plt.colorbar(label=r"$I_{avg}(r)$ / $I_{sat}$")
+	cbar = plt.colorbar(label=r"$I_{avg}(r)$ / $I_{sat}$")
+	cbar.formatter.set_powerlimits((-3, 3))
+	cbar.formatter.set_useMathText(True)
+	cbar.update_ticks()
 	plt.xlabel("Distance (mm)")
 	plt.ylabel("Radius (mm)")
 	plt.title("Encircled-Average Intensity Profiles Heatmap")
