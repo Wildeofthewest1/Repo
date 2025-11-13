@@ -127,7 +127,7 @@ class AgD2Transition:
     """Constants relating to the silver D2 transition"""
     wavelength=328.1625e-9#m
     wavevectorMagnitude=2.0*pi/wavelength
-    NatGamma=1.4e2
+    NatGamma=1.472e2
     dipoleStrength=3.0*sqrt(e0*hbar*(2.0*NatGamma*(10.0**6))*(wavelength**3)/(8.0*pi))
     v0 = c/wavelength
 
@@ -232,18 +232,18 @@ class Rb87_D2:
     IsotopeShift = -56.361 #MHz
 
 class Ag107_D2:
-    """Constants relating to rubidium-85 and the D2 transition"""
+    """Constants relating to silver-107 and the D2 transition"""
     #Hyperfine constants in units of MHz
     Ap = 31.7
     Bp = 0
-    IsotopeShift = 229.24 #MHz
+    IsotopeShift = -229.24 #MHz
 
 class Ag109_D2:
-    """Constants relating to rubidium-87 and the D2 transition"""
+    """Constants relating to silver-109 and the D2 transition"""
     #Hyperfine constants in units of MHz
     Ap = 36.7
     Bp = 0
-    IsotopeShift = -246.76 #MHz
+    IsotopeShift = 246.76 #MHz
 
 class Cs_D1:
     """Constants relating to the caesium-133 atom and the D1 transition"""

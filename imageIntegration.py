@@ -8,8 +8,11 @@ from matplotlib import rcParams
 h = 6.62607015e-34  # Planck's constant (J·s)
 c = 2.99792458e8    # speed of light (m/s)
 wavelength = 328.1629601e-9 #wavelength of light
-gamma_nat = 1.4e8
-I_sat = (np.pi * h * c * gamma_nat)/(3 * wavelength**3)
+gamma_nat = 1.472e8
+tau = 6.79e-9
+I_sat = (np.pi * h * c)/(3 * tau * wavelength**3) #867(4)
+
+print(I_sat)
 
 # --- Configuration ---
 os.chdir(r"C:\\Users\\Alienware\\OneDrive - Durham University\\Level_4_Project\\Lvl_4\\Repo")
@@ -20,7 +23,6 @@ rcParams['font.family'] = 'serif' # e.g. 'sans-serif', 'monospace', etc.
 rcParams['font.serif'] = ['Times New Roman'] # specify a particular font
 rcParams['font.size'] = fontsz
 rcParams['mathtext.fontset'] = 'dejavuserif' # or 'cm', 'stix', 'custom'
-
 
 focus_distance = None # Only show a certain distance
 

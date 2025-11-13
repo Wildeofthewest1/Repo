@@ -178,7 +178,7 @@ plt.xlim([-8.5,8.5])
 plt.yticks([0.00, 0.25, 0.50, 0.75, 1.00])
 plt.xticks([-8, -4, 0, 4, 8])
 
-#plt.savefig(r"C:\Users\Alienware\OneDrive - Durham University\Level_4_Project\Lvl_4\Project\voight_full.pdf", dpi=600, bbox_inches='tight')
+plt.savefig(r"C:\Users\Alienware\OneDrive - Durham University\Level_4_Project\Lvl_4\Project\voight_full.pdf", dpi=600, bbox_inches='tight')
 
 #plt.legend()
 
