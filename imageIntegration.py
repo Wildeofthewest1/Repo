@@ -8,9 +8,14 @@ from matplotlib import rcParams
 h = 6.62607015e-34  # Planck's constant (J·s)
 c = 2.99792458e8    # speed of light (m/s)
 wavelength = 328.1629601e-9 #wavelength of light
+wavelength_error = 0.0000022e-9 
 gamma_nat = 1.472e8
-tau = 6.79e-9
-I_sat = (np.pi * h * c)/(3 * tau * wavelength**3) #867(4)
+gamma_nat_error = 0.007e8
+tau = 6.79e-9 #error 0.03e-9
+tau_error = 0.03e-9 
+
+I_sat = 867 #(np.pi * h * c)/(3 * tau * wavelength**3) #867(4)
+I_sat_error = 4
 
 print(I_sat)
 
@@ -33,8 +38,9 @@ pixel_size = 3.45e-6 #m
 pixel_area = pixel_size**2 #3.45 x 3.45 micrometers squared
 photon_energy = h * c / wavelength
 
-p_total = 1.205e-6 #W #(0.460-0.023)*1e-6
-print("TOTAL MEASURED POWER = " + str(p_total))
+p_total = 1.21e-6
+p_total_error = 0.04e-6
+print("TOTAL MEASURED POWER = " + str(p_total) + "~+-~" + str(p_total_error) + "W")
 
 beam_images = {
 	0:   {"centre": (748, 532), "exposure": None},
@@ -60,6 +66,7 @@ beam_images = {
 }
 
 default_exposure = 12.097e-3  # s
+exposure_error = 0.001
 allNormal = False
 base_path = "Beam_Images_New/"
 
@@ -112,7 +119,6 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
 	nt = int(np.ceil(2 * np.pi * r_max))
 	nt = min(nt, 6000)
 	r = np.linspace(0, r_max, nr) #convert pixel lengths to real lengths in m
-	r_m = r * pixel_size
 	theta = np.linspace(-np.pi, np.pi, nt) #theta in radians
 	r_grid, theta_grid = np.meshgrid(r, theta, indexing="ij")
 	x_p = r_grid * np.cos(theta_grid) + cx
@@ -383,3 +389,62 @@ if focus_distance is None:
 
 else:
 	print(f"Displayed only {focus_distance} mm (single-image mode).")
+
+
+
+# Collect all unscaled total powers
+unscaled_powers = np.array([results[d]["P_total"] for d in results])
+
+# Compute statistics
+mean_unscaled = np.mean(unscaled_powers)
+std_unscaled = np.std(unscaled_powers, ddof=1)  # sample standard deviation
+sem_unscaled = std_unscaled / np.sqrt(len(unscaled_powers))  # standard error of the mean
+
+print(f"Mean unscaled = {mean_unscaled:.3e} W")
+print(f"Standard deviation = {std_unscaled:.3e} W")
+print(f"Standard error = {sem_unscaled:.3e} W")
+
+# --- Propagate all known uncertainties ---
+
+# (1) Scale factor from calibration
+scale_factor = p_total / mean_unscaled
+u_scale = scale_factor * np.sqrt(
+    (sem_unscaled / mean_unscaled) ** 2 + (p_total_error / p_total) ** 2
+)
+
+print(f"\nScale factor k = {scale_factor:.6g} ± {u_scale:.6g}  (rel {u_scale/scale_factor:.3%})")
+
+# (2) Relative uncertainties
+rel_scale_unc = u_scale / scale_factor         # from calibration
+rel_Isat_unc = I_sat_error / I_sat             # from saturation intensity (tau etc.)
+
+# (3) Combine them for I/I_sat
+rel_I_div_Isat_unc = np.sqrt(rel_scale_unc**2 + rel_Isat_unc**2)
+
+print(f"Relative uncertainty in I/I_sat: {rel_I_div_Isat_unc:.3%}")
+
+# (4) Example: propagate to per-image peaks
+for d in results:
+    Imax = results[d]["I_max"]
+    Iavg = results[d]["I_Ave_max"]
+
+    # Absolute uncertainties on intensities (include only scale factor)
+    u_Imax = Imax * rel_scale_unc
+    u_Iavg = Iavg * rel_scale_unc
+
+    # Propagate to normalised intensities (include I_sat)
+    Imax_norm = Imax / I_sat
+    Iavg_norm = Iavg / I_sat
+    u_Imax_norm = Imax_norm * rel_I_div_Isat_unc
+    u_Iavg_norm = Iavg_norm * rel_I_div_Isat_unc
+
+    # Store for optional plotting with error bars
+    results[d]["u_I_max_norm"] = u_Imax_norm
+    results[d]["u_I_avg_norm"] = u_Iavg_norm
+
+# --- Optional print summary ---
+print("\nExample propagated uncertainties:")
+example_d = sorted(results.keys())[0]
+print(f"At distance {example_d} mm:")
+print(f"  I_max/I_sat = {results[example_d]['I_max']/I_sat:.3f} ± {results[example_d]['u_I_max_norm']:.3f}")
+print(f"  I_avg/I_sat = {results[example_d]['I_Ave_max']/I_sat:.3f} ± {results[example_d]['u_I_avg_norm']:.3f}")
