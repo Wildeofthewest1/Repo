@@ -30,7 +30,7 @@ rcParams['font.size'] = fontsz
 rcParams['mathtext.fontset'] = 'dejavuserif' # or 'cm', 'stix', 'custom'
 
 focus_distance = None # Only show a certain distance
-
+plot_main = False
 save_all_plots = True
 #save_all_plots = False
 
@@ -135,7 +135,7 @@ def process_image(distance, centre=None, exposure=None, normalise=False):
 
 	profile_x = r * pixel_size #radial size in m
 	profile_y = (P_r_unnorm * (scale_factor / pixel_area)) / (np.pi * 2) # average intensity per radius
-	r_safe = r
+	r_safe = r.copy()
 	r_safe[0] = r_safe[1]
 	I_avg_area = P_encircled / (np.pi * r_safe**2)  # avoid divide-by-zero at r=0
 	I_avg_area[0] = 0
@@ -177,7 +177,6 @@ for d, info in beam_images.items():
 		"I_Ave_max": I_ave_peak,
 	}
 
-plot_main = not False
 if plot_main:
 	# --- Decide what to plot ---
 	if focus_distance is not None:
@@ -409,7 +408,7 @@ print(f"Standard error = {sem_unscaled:.3e} W")
 # (1) Scale factor from calibration
 scale_factor = p_total / mean_unscaled
 u_scale = scale_factor * np.sqrt(
-    (sem_unscaled / mean_unscaled) ** 2 + (p_total_error / p_total) ** 2
+	(sem_unscaled / mean_unscaled) ** 2 + (p_total_error / p_total) ** 2
 )
 
 print(f"\nScale factor k = {scale_factor:.6g} ± {u_scale:.6g}  (rel {u_scale/scale_factor:.3%})")
@@ -423,24 +422,77 @@ rel_I_div_Isat_unc = np.sqrt(rel_scale_unc**2 + rel_Isat_unc**2)
 
 print(f"Relative uncertainty in I/I_sat: {rel_I_div_Isat_unc:.3%}")
 
-# (4) Example: propagate to per-image peaks
+# --- Estimate detector noise from dark region of polar images ---
+# Uses r = 700–900 pixels region (far outside beam centre)
+# This works better for near-field images where the beam fills the frame.
+
+print("\nEstimating per-image noise from polar dark regions...")
+
+r_noise_min, r_noise_max = 700, 900  # radial range (pixels) for dark background
+
 for d in results:
-    Imax = results[d]["I_max"]
-    Iavg = results[d]["I_Ave_max"]
+	polar = results[d]["polar_img"]
+	nr, nt = polar.shape
 
-    # Absolute uncertainties on intensities (include only scale factor)
-    u_Imax = Imax * rel_scale_unc
-    u_Iavg = Iavg * rel_scale_unc
+	# Convert the target range to indices safely within bounds
+	r_idx_min = int(max(0, min(nr - 1, r_noise_min)))
+	r_idx_max = int(max(0, min(nr - 1, r_noise_max)))
 
-    # Propagate to normalised intensities (include I_sat)
-    Imax_norm = Imax / I_sat
-    Iavg_norm = Iavg / I_sat
-    u_Imax_norm = Imax_norm * rel_I_div_Isat_unc
-    u_Iavg_norm = Iavg_norm * rel_I_div_Isat_unc
+	if r_idx_max <= r_idx_min:
+		print(f"Warning: r range {r_noise_min}-{r_noise_max} px out of bounds for {d} mm (nr={nr}).")
+		continue
 
-    # Store for optional plotting with error bars
-    results[d]["u_I_max_norm"] = u_Imax_norm
-    results[d]["u_I_avg_norm"] = u_Iavg_norm
+	bg_region = polar[r_idx_min:r_idx_max, :].ravel()
+	sigma_pix = np.std(bg_region)
+
+	# crude de-correlation: assume ~10 pixels per independent sample
+	N_eff = max(1, bg_region.size // 10)
+	u_noise = (p_total / results[d]["P_total"]) * sigma_pix / pixel_area
+	u_noise_reduced = u_noise / np.sqrt(N_eff)
+	rel_noise = u_noise_reduced / results[d]["I_max"]
+	results[d]["rel_noise"] = rel_noise
+
+	# Optional: print summary for debugging
+	print(f"{d:>4} mm → σ_pix = {sigma_pix:.2e}, rel_noise = {rel_noise:.2%}")
+
+
+# --- Estimate uncertainty due to manual centre placement ---
+centre_error_px = 3.0  # estimated uncertainty in chosen beam centre [pixels]
+centre_error_m = centre_error_px * pixel_size
+
+print(f"\nEstimating per-image uncertainty from ±{centre_error_px:.0f} px centre placement...")
+
+for d in results:
+	x_prof_m = results[d]["x_prof"]  # already in metres
+	y_prof = results[d]["y_prof"]    # I(r) profile (W/m²)
+
+	# Gradient of radial intensity profile
+	dy_dr = np.gradient(y_prof, x_prof_m)
+	mask = y_prof > 0.05 * np.max(y_prof)
+	g_char = np.percentile(np.abs(dy_dr[mask]), 90) if np.any(mask) else 0.0
+	rel_centre_unc = (g_char * centre_error_m) / np.max(y_prof)
+	results[d]["rel_centre_unc"] = rel_centre_unc
+
+	print(f"{d:>4} mm → rel_centre_unc = {rel_centre_unc:.2%}")
+
+# (4) propagate to per-image peaks
+for d in results:
+	Imax = results[d]["I_max"]
+	Iavg = results[d]["I_Ave_max"]
+
+	# Include scale, Isat, and background noise uncertainties
+	rel_noise = results[d].get("rel_noise", 0)
+	rel_centre_unc = results[d].get("rel_centre_unc", 0)
+	rel_total_unc = np.sqrt(rel_scale_unc**2 + rel_Isat_unc**2 + rel_noise**2 + rel_centre_unc**2)
+
+	Imax_norm = Imax / I_sat
+	Iavg_norm = Iavg / I_sat
+	u_Imax_norm = Imax_norm * rel_total_unc
+	u_Iavg_norm = Iavg_norm * rel_total_unc
+
+	# Store for optional plotting with error bars
+	results[d]["u_I_max_norm"] = u_Imax_norm
+	results[d]["u_I_avg_norm"] = u_Iavg_norm
 
 # --- Optional print summary ---
 print("\nExample propagated uncertainties:")
@@ -462,12 +514,12 @@ plt.figure(figsize=(8, 5))
 
 # Plot with error bars
 plt.errorbar(
-    distances, I_max_values, yerr=u_I_max_norms,
-    fmt="o-", color="tab:red", capsize=3, label=r"Peak $I(r)$"
+	distances, I_max_values, yerr=u_I_max_norms,
+	fmt="o-", color="tab:red", zorder = 1, capsize=3, label=r"Peak $I(r)$"
 )
 plt.errorbar(
-    distances, I_Ave_max_values, yerr=u_I_Ave_norms,
-    fmt="x-", color="tab:orange", capsize=3, label=r"Peak $I_{avg}$"
+	distances, I_Ave_max_values, yerr=u_I_Ave_norms,
+	fmt="x-", color="tab:orange", zorder = 0, capsize=3, label=r"Peak $I_{avg}$"
 )
 
 plt.xlabel("Distance from 0 point (mm)")
@@ -482,3 +534,44 @@ if save_all_plots:
 	plt.savefig("I_max_distance_graph_errors", dpi=300, bbox_inches='tight')
 
 plt.show()
+
+# --- Print summary table of I/I_sat values with uncertainties (scientific format) ---
+print("\n" + "-"*75)
+print(" Summary of normalised intensities (I/I_sat) with uncertainties")
+print("-"*75)
+print(f"{'Distance (mm)':>13s} | {'I_max/I_sat':>25s} | {'I_avg/I_sat':>25s}")
+print("-"*75)
+
+for d in sorted(results.keys()):
+	Imax_norm = results[d]["I_max"] / I_sat
+	Iavg_norm = results[d]["I_Ave_max"] / I_sat
+	u_Imax_norm = results[d]["u_I_max_norm"]
+	u_Iavg_norm = results[d]["u_I_avg_norm"]
+
+	print(f"{d:13.0f} | {Imax_norm:10.3e} ± {u_Imax_norm:8.1e} | {Iavg_norm:10.3e} ± {u_Iavg_norm:8.1e}")
+
+print("-"*75)
+
+# --- Generate LaTeX table output (scientific notation) ---
+print("\nLaTeX table output:\n")
+print("\\begin{table}[h]")
+print("\\centering")
+print("\\caption{Normalised peak and average intensities with propagated uncertainties.}")
+print("\\begin{tabular}{ccc}")
+print("\\hline")
+print("Distance (mm) & $I_{\\max}/I_{\\mathrm{sat}}$ & $I_{\\mathrm{avg}}/I_{\\mathrm{sat}}$\\\\")
+print("\\hline")
+
+for d in sorted(results.keys()):
+	Imax_norm = results[d]["I_max"] / I_sat
+	Iavg_norm = results[d]["I_Ave_max"] / I_sat
+	u_Imax_norm = results[d]["u_I_max_norm"]
+	u_Iavg_norm = results[d]["u_I_avg_norm"]
+
+	Imax_str = f"${Imax_norm:.3e} \\pm {u_Imax_norm:.1e}$"
+	Iavg_str = f"${Iavg_norm:.3e} \\pm {u_Iavg_norm:.1e}$"
+	print(f"{d:>4} & {Imax_str} & {Iavg_str} \\\\")
+
+print("\\hline")
+print("\\end{tabular}")
+print("\\end{table}")
