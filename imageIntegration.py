@@ -448,3 +448,37 @@ example_d = sorted(results.keys())[0]
 print(f"At distance {example_d} mm:")
 print(f"  I_max/I_sat = {results[example_d]['I_max']/I_sat:.3f} ± {results[example_d]['u_I_max_norm']:.3f}")
 print(f"  I_avg/I_sat = {results[example_d]['I_Ave_max']/I_sat:.3f} ± {results[example_d]['u_I_avg_norm']:.3f}")
+
+# --- Peak Intensity vs Distance (with error bars) ---
+distances = list(results.keys())
+I_max_values = np.array([results[d]["I_max"] for d in distances]) / I_sat
+I_Ave_max_values = np.array([results[d]["I_Ave_max"] for d in distances]) / I_sat
+
+# Extract propagated uncertainties
+u_I_max_norms = np.array([results[d]["u_I_max_norm"] for d in distances])
+u_I_Ave_norms = np.array([results[d]["u_I_avg_norm"] for d in distances])
+
+plt.figure(figsize=(8, 5))
+
+# Plot with error bars
+plt.errorbar(
+    distances, I_max_values, yerr=u_I_max_norms,
+    fmt="o-", color="tab:red", capsize=3, label=r"Peak $I(r)$"
+)
+plt.errorbar(
+    distances, I_Ave_max_values, yerr=u_I_Ave_norms,
+    fmt="x-", color="tab:orange", capsize=3, label=r"Peak $I_{avg}$"
+)
+
+plt.xlabel("Distance from 0 point (mm)")
+plt.ylabel(r"$I_{max}$ / $I_{sat}$")
+plt.title("Peak intensity vs distance")
+plt.legend(loc="lower right")
+plt.tight_layout()
+
+plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 3))
+
+if save_all_plots:
+	plt.savefig("I_max_distance_graph_errors", dpi=300, bbox_inches='tight')
+
+plt.show()
