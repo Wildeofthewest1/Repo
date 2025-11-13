@@ -5,6 +5,20 @@ import os
 from scipy.integrate import cumulative_trapezoid as cumtrapz
 from matplotlib import rcParams
 
+from matplotlib.ticker import AutoMinorLocator
+
+rcParams['xtick.direction'] = 'in'
+rcParams['ytick.direction'] = 'in'
+rcParams['xtick.top'] = True
+rcParams['ytick.right'] = True
+rcParams['xtick.minor.visible'] = True
+rcParams['ytick.minor.visible'] = True
+rcParams['xtick.major.size'] = 4
+rcParams['ytick.major.size'] = 4
+rcParams['xtick.minor.size'] = 2
+rcParams['ytick.minor.size'] = 2
+
+
 h = 6.62607015e-34  # Planck's constant (J·s)
 c = 2.99792458e8    # speed of light (m/s)
 wavelength = 328.1629601e-9 #wavelength of light

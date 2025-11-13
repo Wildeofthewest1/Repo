@@ -15,6 +15,19 @@ rcParams['font.serif'] = ['Times New Roman'] # specify a particular font
 rcParams['font.size'] = fontsz
 rcParams['mathtext.fontset'] = 'dejavuserif' # or 'cm', 'stix', 'custom'
 
+from matplotlib.ticker import AutoMinorLocator
+
+rcParams['xtick.direction'] = 'in'
+rcParams['ytick.direction'] = 'in'
+rcParams['xtick.top'] = True
+rcParams['ytick.right'] = True
+rcParams['xtick.minor.visible'] = True
+rcParams['ytick.minor.visible'] = True
+rcParams['xtick.major.size'] = 4
+rcParams['ytick.major.size'] = 4
+rcParams['xtick.minor.size'] = 2
+rcParams['ytick.minor.size'] = 2
+
 Detuning=np.linspace(-10,10,2000)*1e3 #Detuning range between -10 and 10 GHz. Needs to be input in MHz
 E_in=np.array([1,0,0]) #Horizontal Linear Light input. We define E_in = [Ex,Ey,Ez]
 
